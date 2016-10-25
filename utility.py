@@ -26,6 +26,22 @@ def parse_input_file(filename):
             ret[float(arr[0])] = Drop_mass(float(arr[1]), float(arr[2]), float(arr[3])
         line_counter += 1
     yield t, ret
+
+def core_status_generator(t_start, t_step):
+    t = t_start
+    water_history = np.array(Const.water_history)
+    power_history = np.array(Const.power_history)
+    bottom_history = np.array(Const.bottom_history)
+    radial_factor = Const.power_distribute
+    radial_factor /= sum(radial_factor)
+    basic_power_sum = Const.dict['total_power']
+    while True:
+        now_water = np.interp(t, water_history[:, 0], water_history[:, 1])
+        now_power = np.interp(t, power_history[:, 0], power_history[:, 1])
+        bottom_temp = np.interp(t, bottom_history[:, 0], bottom_history[:, 1])
+        #now_power_distribution = basic_power_sum * now_power * np.array(radial_factor)
+        yield  now_water, bottom_temp,  now_power_distribution
+
 def calSteamGr(dT,L):
     dT = abs(dT)
     beta = 0.00268
@@ -68,10 +84,32 @@ def calc_drop_volumn(drop_list):
         drop_vol += item.gray__mass / gray_dense
     return drop_vol
 
-def calc_total_up_heat(drop_list):
+def calc_core_flux(bottom_t, board_t):
+    distance = Const.dict['bottom_board_distance']
+    sigma = Const.dict['bottom_sigma']
+    epsi = Const.dict['bottom_epsi']
+    r = Const.dict['board_radious']
+    area = math.pi * r * r
+    qrad = area * sigma * epsi * (bottom_t ** 4 - board_t ** 4)
+    qcov = 0.0
+    return  qrad + qcov
+
+
+def calc_drop_heat(drop_list, assembly_id):
+    assert isinstance(drop_list, dict)
+    assert isinstance(assembly_id, dict)
+    drop_heat_for_each_assembly = imap(lambda (iass, item) : (iass, item.sum()), drop_list.items())
+    rod_idx = []
+    drop_heat_for_rod = []
+    for (iass, assemblyHeat) in drop_heat_for_each_assembly:
+        drop_heat_for_rod += [ assemblyHeat/len(assembly_id[iass] ] * len(assembly_id[iass]
+        rod_idx += assembly_id[iass]
+    return rod_idx, drop_heat_for_rod
+
+
+def calc_pool_heat(drop_list):
     r = Const.dict['board_radious']
     sum = 0
     for item in drop_list.values():
         sum += item.sum()
     return 
-def 
