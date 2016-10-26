@@ -1,5 +1,5 @@
-import sys
 import numpy as np
+import math
 import constant as Const
 
 class Drop_mass(object):
@@ -19,11 +19,14 @@ def parse_input_file(filename):
         if line_counter % 53 == 0:
             yield t, ret
             t = float(line)
-            ret = []
+            ret = {}
         else:
-            to_append = {}
             arr = line.split('\t')
-            ret[float(arr[0])] = Drop_mass(float(arr[1]), float(arr[2]), float(arr[3])
+            iass = int(arr[0])
+            if ret.get(iass) is None:
+                ret[iass] = [ Drop_mass(float(arr[1]), float(arr[2]), float(arr[3])) ]
+            else:
+                ret[iass].append(Drop_mass(float(arr[1]), float(arr[2]), float(arr[3])))
         line_counter += 1
     yield t, ret
 
@@ -39,8 +42,9 @@ def core_status_generator(t_start, t_step):
         now_water = np.interp(t, water_history[:, 0], water_history[:, 1])
         now_power = np.interp(t, power_history[:, 0], power_history[:, 1])
         bottom_temp = np.interp(t, bottom_history[:, 0], bottom_history[:, 1])
-        #now_power_distribution = basic_power_sum * now_power * np.array(radial_factor)
+        now_power_distribution = basic_power_sum * now_power * np.array(radial_factor)
         yield  now_water, bottom_temp,  now_power_distribution
+        t += t_step
 
 def calSteamGr(dT,L):
     dT = abs(dT)
@@ -61,17 +65,14 @@ def calcSteamHeatTransferRate(Gr, Prf, L):
     return   Nu * lamda / L
 
 def calc_hcoef(T, L, Tf):
-    Gr = calSteamGr(T - Tf)
+    Gr = calSteamGr(T - Tf, L)
     Pr_fluid = Const.dict['Pr_steam']
     Pr_wall = Const.dict['Pr_wall']
-    h = calcSteamHeatTransferRate(Gr, Pr_fluid, Pr_wall, L)
+    h = calcSteamHeatTransferRate(Gr, Pr_fluid, L)
     return h
 
 def calc_melted_volumn(mask, mesh):
-    vol = 0
-    for idx in mask:
-        vol += mesh.get_neighbour(idx)
-    return volk
+    return sum( map(lambda idx: mesh.get_volumn(idx), mask) )
 
 def calc_drop_volumn(drop_list):
     fuel_dense = Const.dict['fuel_dense']
@@ -85,7 +86,7 @@ def calc_drop_volumn(drop_list):
     return drop_vol
 
 def calc_core_flux(bottom_t, board_t):
-    distance = Const.dict['bottom_board_distance']
+    #distance = Const.dict['bottom_board_distance']
     sigma = Const.dict['bottom_sigma']
     epsi = Const.dict['bottom_epsi']
     r = Const.dict['board_radious']
@@ -98,11 +99,11 @@ def calc_core_flux(bottom_t, board_t):
 def calc_drop_heat(drop_list, assembly_id):
     assert isinstance(drop_list, dict)
     assert isinstance(assembly_id, dict)
-    drop_heat_for_each_assembly = imap(lambda (iass, item) : (iass, item.sum()), drop_list.items())
+    drop_heat_for_each_assembly = [ (iass, item.sum()) for (iass, item) in drop_list.items() ] 
     rod_idx = []
     drop_heat_for_rod = []
     for (iass, assemblyHeat) in drop_heat_for_each_assembly:
-        drop_heat_for_rod += [ assemblyHeat/len(assembly_id[iass] ] * len(assembly_id[iass]
+        drop_heat_for_rod += ([ assemblyHeat/len(assembly_id[iass]) ] * len(assembly_id[iass]) )
         rod_idx += assembly_id[iass]
     return rod_idx, drop_heat_for_rod
 
@@ -112,4 +113,16 @@ def calc_pool_heat(drop_list):
     sum = 0
     for item in drop_list.values():
         sum += item.sum()
-    return 
+    sum /= (math.pii * r *r)
+    return sum
+
+def stupid_method(begin, end, q, n):
+    p =  (1 - q ** n)/(1 - q) 
+    ret = np.empty((n))
+    s = end - begin
+    ret[0] = s/p
+    for i in xrange(1, n):
+        ret[i] = ret[i-1] * q
+    print sum(ret)
+    return ret
+

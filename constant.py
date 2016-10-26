@@ -1,33 +1,38 @@
 
 dict = {
-    'total_power':
-    'global_rou':
-    'global_cp':
-    'global_epsilong':
-    'global_lamda':
-    'global_melt_point'
-    'board_radious':
-    'board_thick':
-    'bottom_board_distance':
-    'bottom_sigma':
-    'bottom_epsi':
-    'nr':
-    'nt':
-    'nz':
-    'radious_increase_ratio': 0.9,
+    'total_power': 3.15e9, # W
+    'global_rou': 7020, # kg/m-3
+    'global_cp': 835, # J/(kg * K)
+    'global_epsilong': 0.8,
+    'global_lamda':25, # W /(m * K)
+    'global_melt_point':1600, #K 
+    'board_radious': 3.63, #m
+    'board_thick': 0.415, #m
+    'bottom_board_distance':0.079, #m
+    'bottom_sigma':5.67e-8, #W/(m^2 * K^4)
+    'bottom_epsi': 0.8, 
+    'nr': 270, #
+    'nt': 36, #
+    'nz': 30, #
+    'radious_increase_ratio': 0.988,
     'T_init': 373,
     'T_steam': 500,
-    'Pr_steam': 
-    'Pr_wall':
-    'lambda_steam': 0.025
-    'fuel_dense':
-    'clad_dense':
-    'gray_dense':
+    'Pr_steam': 1.003, 
+    'Pr_wall': 1.1, # imaginary
+    'lambda_steam': 0.025, # W/(m * K)
+    'fuel_dense': 8740, # kg / (m^3)
+    'clad_dense': 5990, # kg / (m^3)
+    'gray_dense': 7020, # kg / (m^3)
  }
 
 
 bottom_history = [
-
+    (0.0, 1500),
+    (1000.0, 1500),
+    (2000.0, 1500),
+    (3000.0, 1500),
+    (4000.0, 1500), 
+    (5000.0, 1500), 
 ]
 
 power_distribute = [
@@ -86,28 +91,28 @@ power_distribute = [
 ]
 
 water_history = [
-    (0.000000 	    ,7.100000 )
-    (90.000000 	    ,6.187 )
-    (146.512000 	,4.517930 )
-    (300.000000 	,3.569720 )
-    (641.860000 	,2.956180 )
-    (1056.000000 	,2.530000 )
-    (1056.000000 	,2.530000 )
-    (4688.260000 	,1.953660 )
-    (4870.000000 	,0.000000 )
+    (0.000000 	    ,7.100000 ),
+    (90.000000 	    ,6.187 ),
+    (146.512000 	,4.517930 ),
+    (300.000000 	,3.569720 ),
+    (641.860000 	,2.956180 ),
+    (1056.000000 	,2.530000 ),
+    (1056.000000 	,2.530000 ),
+    (4688.260000 	,1.953660 ),
+    (4870.000000 	,0.000000 ),
 ]
 
 power_history = [
-    (0.0 , 1     )
-    (0.1 , 0.9998)
-    (1,	   0.9857)
-    (10,   0.146)
-    (100,  0.038)
-    (300,  0.0257)
-    (600,  0.0222)
-    (1800, 0.0164)
-    (3600, 0.0133)
-    (7200, 0.0108)
+    (0.0 , 1     ),
+    (0.1 , 0.9998),
+    (1,	   0.9857),
+    (10,   0.146) ,
+    (100,  0.038) ,
+    (300,  0.0257),
+    (600,  0.0222),
+    (1800, 0.0164),
+    (3600, 0.0133),
+    (7200, 0.0108),
 ]
 
 assembly_pos = [
