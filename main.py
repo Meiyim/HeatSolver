@@ -8,6 +8,7 @@ import mesh as Mesh
 import solver as Solver
 import constant as Const
 import utility as uti
+import crash_on_ipy
 
 def summary(now, T):
     print '[time %f] max T %e min %e ave %e' % (now, T.max(), T.min(), T.mean())
@@ -54,21 +55,22 @@ def main():
     pool_volumn = 0
     melted_set_sum = set()
     melted_set = set()
-    print 'start solving'
-    #
+    print 'prepare solving'
     A, b = solver.get_template()
     solver.build_laplas_matrix(A)
-    solver.add_teporal_term(A, b, 1.0)
-    for (t, drop_list),(now_water, bottom_t, now_power_distribution) in zip(uti.parse_input_file('input.dat'), uti.core_status_generator(0.0, 1.0)):
+    print 'start solving'
+    for (t, drop_list),(now_water, bottom_t, now_power_distribution) in zip(uti.parse_input_file('melt_mass.dat'), uti.core_status_generator(0.0, 1.0)):
         pool_volumn += uti.calc_drop_volumn(drop_list)
         if len(melted_set) != 0:
             solver.set_mask(melted_set)
         T = solver.get_T()
+        #temporal_term
+        A_, b_ = solver.duplicate_template()
+        solver.add_teporal_term(A_, b_, 1.0)
         #down_side
         T_down_mean = np.array([ T[idx] for idx in  down_id]).mean()
         h = uti.calc_hcoef(T_down_mean, corelation_length, T_steam)
-        A_, b_ = solver.duplicate_template()
-        solver.set_down_side(A_, b_, 0.0, h * (T_steam - T_down_mean), T_steam)
+        solver.set_down_side(A_, b_, 0.0, h * (T_down_mean - T_steam ), T_steam)
         #up_side
         melted_set = solver.update_mask()
         melted_set_sum = melted_set_sum | melted_set
@@ -80,6 +82,8 @@ def main():
             flux_from_core = uti.calc_core_flux(bottom_t, T_up_mean)
             solver.set_upper_flux(b_, upper_surface_idx, flux_from_core)
             # drop 
+            b_.view()
+            raw_input()
             rod_idx, drop_heat_for_rod = uti.calc_drop_heat(drop_list, assembly_id)
             solver.set_heat_point(b_, rod_idx, drop_heat_for_rod)
         else: #pool cover the bottom

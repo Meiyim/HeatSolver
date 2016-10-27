@@ -21,12 +21,9 @@ def parse_input_file(filename):
             t = float(line)
             ret = {}
         else:
-            arr = line.split('\t')
+            arr = line.split()
             iass = int(arr[0])
-            if ret.get(iass) is None:
-                ret[iass] = [ Drop_mass(float(arr[1]), float(arr[2]), float(arr[3])) ]
-            else:
-                ret[iass].append(Drop_mass(float(arr[1]), float(arr[2]), float(arr[3])))
+            ret[iass] =  Drop_mass(float(arr[1]), float(arr[2]), float(arr[3]))
         line_counter += 1
     yield t, ret
 
@@ -35,7 +32,7 @@ def core_status_generator(t_start, t_step):
     water_history = np.array(Const.water_history)
     power_history = np.array(Const.power_history)
     bottom_history = np.array(Const.bottom_history)
-    radial_factor = Const.power_distribute
+    radial_factor = np.array(Const.power_distribute)
     radial_factor /= sum(radial_factor)
     basic_power_sum = Const.dict['total_power']
     while True:
@@ -59,8 +56,8 @@ def calcSteamHeatTransferRate(Gr, Prf, L):
     mul = Gr*Prf
     lamda = Const.dict['lambda_steam']
     Nu = 0.0
-    if Gr < 6.37e5 or Gr <1.12e8:
-        print 'Gr did not confront corelation'
+    if Gr < 6.37e5 or Gr > 1.12e8:
+        print 'Gr did not confront corelation Gr: %e' % Gr
     Nu = 0.747 * (mul) ** (1./6.)
     return   Nu * lamda / L
 
@@ -82,7 +79,7 @@ def calc_drop_volumn(drop_list):
     for item in drop_list.values():
         drop_vol += item.fuel_mass / fuel_dense
         drop_vol += item.clad_mass / clad_dense
-        drop_vol += item.gray__mass / gray_dense
+        drop_vol += item.gray_mass / gray_dense
     return drop_vol
 
 def calc_core_flux(bottom_t, board_t):
@@ -113,7 +110,7 @@ def calc_pool_heat(drop_list):
     sum = 0
     for item in drop_list.values():
         sum += item.sum()
-    sum /= (math.pii * r *r)
+    sum /= (math.pi * r *r)
     return sum
 
 def stupid_method(begin, end, q, n):
@@ -121,8 +118,11 @@ def stupid_method(begin, end, q, n):
     ret = np.empty((n))
     s = end - begin
     ret[0] = s/p
+    total = 0
     for i in xrange(1, n):
-        ret[i] = ret[i-1] * q
+        ret[i] = ret[i-1] * q  + total
+    for i in xrange(1, n):
+        ret[i] += ret[i-1]
     print sum(ret)
     return ret
 

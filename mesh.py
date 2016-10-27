@@ -54,16 +54,18 @@ class StructuredMesh3D(Mesh):
         nodes_index = [self.get_index(idx) for idx in region]
         assert None not in nodes_index
         self._region[name] = set(nodes_index)
-    def get_3d_index(self, i):
-        if i >= self._ncell or i < 0 :
+    def get_3d_index(self, idx):
+        if idx >= self._ncell or idx < 0 :
             return None
         else:
-            return  (i / (self._ny * self._nz), \
-                     i / (self._nz), \
-                     i )
+            i = idx / (self._ny * self._nz)
+            yu = idx % (self._ny * self._nz)
+            j =  yu / self._nz
+            k =  yu % self._nz
+            return  i, j, k
     def get_index(self, cord): #None able
         x, y, z = cord
-        if 0 <= x < self._nx or 0<= y < self._ny or 0 < z <= self._nz :
+        if 0 <= x < self._nx and 0<= y < self._ny and 0 <= z < self._nz :
             return x * self._ny * self._nz + \
                    y * self._nz + \
                    z
@@ -71,16 +73,17 @@ class StructuredMesh3D(Mesh):
             return None
     def get_neighbour3d(self, cord):
         i, j, k = cord
-        return (   self.get_index((i+1, j, k)),
+        return (self.get_index((i+1, j, k)),
                 self.get_index((i-1, j, k)),
                 self.get_index((i, j+1, k)),
                 self.get_index((i, j-1, k)),
                 self.get_index((i, j, k+1)),
                 self.get_index((i, j, k-1)),
-              )
+               )
     def get_neighbour(self, idx):
         cord = self.get_3d_index(idx)
-        return self.get_neighbour3d(cord)
+        ret = self.get_neighbour3d(cord)
+        return ret
 
     def get_neighbour_length3d(self, cord):
         i, j, k = cord
@@ -118,9 +121,12 @@ class CylinderlMesh(StructuredMesh3D):
         dr = r / float(ir)
         dr /= 2
         dz = z / float(iz)
+        dz /= 2
         print 'begin %f end %f ratio %e' % (dr, r-dr, qr)
         super(CylinderlMesh, self).__init__(ir, it, iz, dr, r-dr, 0., math.pi, dz, z - dz)
         self._cordinatex = uti.stupid_method(dr, r-dr, qr, ir)
+        self._cordinatex = np.hstack((self._cordinatex, np.array((r+dr, -dr))))
+        self._cordinatez = np.hstack((self._cordinatez, np.array((z+dz, -dz))))
         print 'CHECK CORDINATE R: %s' % str(self._cordinatex)
         upper_bound = set(
             [self.get_index(cord)  for cord in itertools.product(xrange(0, ir), xrange(0, it), xrange(iz - 1, iz)) ]
@@ -132,15 +138,14 @@ class CylinderlMesh(StructuredMesh3D):
 
     def get_neighbour3d(self, cord):
         i, j, k = cord
-        return filter(lambda v : v is not None,
-            (
+        return (
                 self.get_index((i+1, j, k)),
                 self.get_index((i-1, j, k)),
                 self.get_index((i, (j+1)%self._ny, k)),
                 self.get_index((i, (j-1)%self._ny, k)),
                 self.get_index((i, j, k+1)),
                 self.get_index((i, j, k-1)),
-            ))
+            )
     def get_index_at_poristion(self, pos):
         x, y, z = pos
         dz = int((z - self._cordinatez[0]) / self._cordinatez.shape[0])
@@ -156,12 +161,12 @@ class CylinderlMesh(StructuredMesh3D):
  
     def d_cordinate(self, cord):
         i, j, k = cord
-        dr1 =       self._cordinatex[(i + 1) % self._nx] - self._cordinatex[i],
-        dr2 =       self._cordinatex[(i - 1) % self._nx] - self._cordinatex[i],
-        dtheta1 =   self._cordinatey[(j + 1) % self._ny] - self._cordinatey[j],
-        dtheta2 =   self._cordinatey[(j - 1) % self._ny] - self._cordinatey[j],
-        dz1 =       self._cordinatez[(k + 1) % self._nz] - self._cordinatez[k],
-        dz2 =       self._cordinatez[(k - 1) % self._nz] - self._cordinatez[k],
+        dr1 =       self._cordinatex[i + 1] - self._cordinatex[i]
+        dr2 =       self._cordinatex[i] - self._cordinatex[i - 1]
+        dtheta1 =   self._cordinatey[1] - self._cordinatey[0]
+        dtheta2 =   self._cordinatey[1] - self._cordinatey[0]
+        dz1 =       self._cordinatez[k + 1] - self._cordinatez[k]
+        dz2 =       self._cordinatez[k] - self._cordinatez[k - 1]
         return dr1, dr2, dtheta1, dtheta2, dz1, dz2
     def d_cordinate_center(self, cord):
         dr1, dr2, dtheta1, dtheta2, dz1, dz2 = self.d_cordinate(cord)

@@ -29,7 +29,7 @@ class PetscSolver(Solver):
     def get_template(self):
         return self._coefMatrixTemplate, self._rhsTemplate
     def duplicate_template(self):
-        self._coefMatrix = self._coefMatrixTemplate.duplicate()
+        self._coefMatrix = self._coefMatrixTemplate.duplicate(copy=True)
         self._rhs = self._rhsTemplate.duplicate()
         return self._coefMatrix, self._rhs
     def allocate(self, Tinit):
@@ -37,10 +37,11 @@ class PetscSolver(Solver):
         vec = PETSc.Vec().createSeq(ncell)
         self._rhsTemplate = vec.duplicate()
         self._xsol = vec.duplicate()
-        self._coefMatrixTemplate = PETSc.Mat().createAIJ([ncell, ncell], nnz = 5)
+        self._coefMatrixTemplate = PETSc.Mat().createAIJ([ncell, ncell], nnz = 7)
         self._T = np.zeros((ncell))
         self._T[:] = Tinit
     def prepare_context(self): # prepare CG with ILU Precondition
+        self._ksp = PETSc.KSP().create()
         self._ksp.setType(PETSc.KSP.Type.CG)
         pc = self._ksp.getPC()
         pc.setType(PETSc.PC.Type.ILU)
@@ -52,7 +53,7 @@ class PetscSolver(Solver):
             rcp  = self._mesh.get_material_at_index(i).rcp()
             temporal_term = vol *  rcp / dt
             A.setValue(i, i, temporal_term, addv = True) 
-            b.setValues(i, temporal_term * self._T[i],addv = True)
+            b.setValue(i, temporal_term * self._T[i],addv = True)
         A.assemblyBegin()
         b.assemblyBegin()
         A.assemblyEnd()
@@ -60,10 +61,10 @@ class PetscSolver(Solver):
     def set_down_side(self, A, b, h, q, Tf):
         idxs = self._mesh.get_region('down') 
         ncell = self._mesh.get_ncell()
-        area = [self._mesh.get_neighbour_area(idx)[5] for idx in idxs]
-        for i in xrange():
-            A.setValues( i, i, area[i] * h, addv = True)
-        b.setValues(range(0, ncell), area * (h * Tf  - q ), addv = True)
+        area_array = np.array([self._mesh.get_neighbour_area(idx)[5] for idx in idxs])
+        for area, idx in zip(area_array, idxs):
+            A.setValues( idx, idx, area * h, addv = True)
+        b.setValues(idxs, area_array * (h * Tf  - q ), addv = True)
         b.assemblyBegin()
         A.assemblyBegin()
         b.assemblyEnd()
@@ -73,23 +74,29 @@ class PetscSolver(Solver):
         b.setValues(idx_array, heat_array, addv = True)
     def set_upper_flux(self, b, idx_array, flux):
         areas = [self._mesh.get_neighbour_area(idx)[4] for idx in idx_array]
-        flux = flux * areas
+        flux = flux * np.array(areas)
         b.setValues(idx_array, flux, addv = True)
     def build_laplas_matrix(self, A):
-        for i in xrange(0, self._mesh.get_ncell()):
-            nei = self._mesh.get_neighbour(i) 
-            lens = self._mesh.get_neighbour_lenth(i)
-            coef = self._mesh.get_neighbour_coef(i)
-            area = self._mesh.get_neighbour_area(i)
-
-            lens = filter(lambda (i, val): nei[i] is not None, enumerate(lens))
-            area = filter(lambda (i, val): nei[i] is not None, enumerate(area))
-            coef = filter(lambda (i, val): nei[i] is not None, enumerate(coef))
+        print 'building laplas template...'
+        for row in xrange(0, self._mesh.get_ncell()):
+            nei = self._mesh.get_neighbour(row) 
+            lens = self._mesh.get_neighbour_lenth(row)
+            coef = self._mesh.get_neighbour_coef(row)
+            area = self._mesh.get_neighbour_area(row)
+    
+            #print 'cord', self._mesh.get_3d_index(row)
+            #print 'coef', coef
+            #print 'area', area
+            #print 'lens', lens
+            #print 'nei', nei
+            lens = np.array([ l for i,l in enumerate(lens) if nei[i] is not None])
+            area = np.array([ a for i,a in enumerate(area) if nei[i] is not None])
             nei = filter(lambda val: val is not None, nei)
-            vals = coef * area / lens
-            A.setValues([i], nei, vals) # off-diagnal
+            vals = -1.0 * coef * area / lens
+            #print 'vals',  vals
+            A.setValues([row], nei, vals) # off-diagnal
             center = 0. - sum(vals)
-            A.setValue(i, i,  center)#diagnal
+            A.setValue(row, row,  center)#diagnal
         A.assemblyBegin()
         A.assemblyEnd()
     def set_mask(self, melted_mask): #set on the template
@@ -110,7 +117,7 @@ class PetscSolver(Solver):
         return self._melted_set
     def update_mask(self):
         ret = set()
-        for i, temp in self._T:
+        for i, temp in enumerate(list(self._T)):
             if i in self._melted_set:
                 continue
             melt_point = self._mesh.get_material_at_index(i).melt_point
