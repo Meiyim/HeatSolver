@@ -24,14 +24,15 @@ class Mesh(object):
         pass
     def get_region(self, name):
         return list(self._region.get(name))
+    def get_position(self, idx):
+        pass
     def get_volumn(self, i):
         pass
     def get_neighbour(self, i):
         pass
     def get_neighbour_lenth(self, i):
         pass
-    def get_neighbour_coef(self, i):
-        pass
+    def get_neighbour_coef(self, i): pass 
     def get_neighbour_area(self, i):
         pass
 
@@ -63,6 +64,11 @@ class StructuredMesh3D(Mesh):
             j =  yu / self._nz
             k =  yu % self._nz
             return  i, j, k
+    def get_position(self, idx):
+        cord = self.get_3d_index(idx)
+        return self.get_position3d(cord)
+    def get_position3d(self, cord):
+        pass
     def get_index(self, cord): #None able
         x, y, z = cord
         if 0 <= x < self._nx and 0<= y < self._ny and 0 <= z < self._nz :
@@ -123,7 +129,7 @@ class CylinderlMesh(StructuredMesh3D):
         dz = z / float(iz)
         dz /= 2
         print 'begin %f end %f ratio %e' % (dr, r-dr, qr)
-        super(CylinderlMesh, self).__init__(ir, it, iz, dr, r-dr, 0., math.pi, dz, z - dz)
+        super(CylinderlMesh, self).__init__(ir, it, iz, dr, r-dr, 0., 2 * math.pi, dz, z - dz)
         self._cordinatex = uti.stupid_method(dr, r-dr, qr, ir)
         self._cordinatex = np.hstack((self._cordinatex, np.array((r+dr, -dr))))
         self._cordinatez = np.hstack((self._cordinatez, np.array((z+dz, -dz))))
@@ -136,6 +142,14 @@ class CylinderlMesh(StructuredMesh3D):
         self.set_region_3d('down', itertools.product(xrange(0, self._nx), xrange(0, self._ny), xrange(0, 1)))
         self.set_region_3d('side', itertools.product(xrange(ir-1, self._nx), xrange(0, self._ny), xrange(0, self._nz)))
 
+
+    def get_position3d(self, cord):
+        ix, iy, iz = cord
+        r = self._cordinatex[ix]
+        theta = self._cordinatey[iy]
+        z = self._cordinatez[iz]
+        return r * math.cos(theta), r * math.sin(theta), z
+
     def get_neighbour3d(self, cord):
         i, j, k = cord
         return (
@@ -146,18 +160,18 @@ class CylinderlMesh(StructuredMesh3D):
                 self.get_index((i, j, k+1)),
                 self.get_index((i, j, k-1)),
             )
-    def get_index_at_poristion(self, pos):
-        x, y, z = pos
-        dz = int((z - self._cordinatez[0]) / self._cordinatez.shape[0])
+    def get_bottom_index_at_position(self, pos): #optimizeable
+        x, y = pos
         r = math.sqrt(x**2 + y**2)
-        theta = math.acos( x/r )
-        dt = int((theta - self._cordinatey[0]) / self._cordinatey.shape[0])
+        theta = math.atan(y / (x + 1.e-9))
+        theta = theta if x > 0. else theta + math.pi
+        dt = int( (theta - self._cordinatey[0] / self._ny) ) 
         dr = 0
         for the_r in self._cordinatex:
             dr += 1
             if the_r > r:
                 break
-        return self.get_index((dz, dt, dr))
+        return self.get_index((dr, dt, self._nz - 1))
  
     def d_cordinate(self, cord):
         i, j, k = cord
@@ -207,4 +221,20 @@ class CylinderlMesh(StructuredMesh3D):
             return idx
         self._upper_boundary = [_find_upper(idx) for idx in self._upper_boundary ]
         return self._upper_boundary
+    def tecplot_str(self, var):
+        tec_text = []
+        tec_text.append('title = supporting board')
+        tec_text.append('ZONE I=%d, J=%d, K=%d, F=point' % (self._nz, self._ny, self._nx + 1))
+        #a fake center
+        center_idx  = [self.get_index((0, 0, k)) for k in xrange(0, self._nz)]
+        varcenter = np.array([var[idx] for idx in center_idx])
+        for j in xrange(0, self._ny):
+            for k in xrange(0, self._nz):
+                tec_text.append('%e %e %e %e' % (0., 0., 0., varcenter[k]))
+        for i in xrange(0, self._nx):
+            for j in xrange(0, self._ny):
+                for k in xrange(0, self._nz):
+                    idx = self.get_index((i, j, k))
+                    tec_text.append('%e %e %e %e' % ( self.get_position3d((i, j, k)) + (var[idx],) ))
+        return '\n'.join(tec_text)
 

@@ -11,10 +11,10 @@ dict = {
     'bottom_board_distance':0.079, #m
     'bottom_sigma':5.67e-8, #W/(m^2 * K^4)
     'bottom_epsi': 0.8, 
-    'nr': 270, #
-    'nt': 36, #
+    'nr': 54, #
+    'nt': 72, #
     'nz': 30, #
-    'radious_increase_ratio': 0.988,
+    'radious_increase_ratio': 0.995,
     'T_init': 373,
     'T_steam': 500,
     'Pr_steam': 1.003, 
@@ -116,7 +116,7 @@ power_history = [
 ]
 
 assembly_pos = [
-    (0.00000, 0.00000,  1),
+    (0.00100, 0.00100,  1),
     (0.00000, 0.01259,  1),
     (0.00000, 0.02518,  1),
     (0.00000, 0.03776,  1),

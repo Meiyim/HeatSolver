@@ -1,14 +1,20 @@
 import numpy as np
 import math
 import constant as Const
+import sys
+
 
 class Drop_mass(object):
     def __init__(self, f, c, g):
         self.fuel_mass = f
         self.clad_mass = c
         self.gray_mass = g
-    def sum(self):
+    def heat_sum(self):
+        return
+    def mass_sum(self):
         return self.fuel_mass + self.clad_mass + self.gray_mass
+    def toString(self):
+        return '[fule] %e [clad] % e [gray] %e' % (self.fuel_mass, self.clad_mass, self.gray_mass)
 
 def parse_input_file(filename):
     f = open(filename, 'r')
@@ -66,7 +72,7 @@ def calc_hcoef(T, L, Tf):
     Pr_fluid = Const.dict['Pr_steam']
     Pr_wall = Const.dict['Pr_wall']
     h = calcSteamHeatTransferRate(Gr, Pr_fluid, L)
-    return h
+    return 1000.0
 
 def calc_melted_volumn(mask, mesh):
     return sum( map(lambda idx: mesh.get_volumn(idx), mask) )
@@ -77,6 +83,7 @@ def calc_drop_volumn(drop_list):
     gray_dense = Const.dict['gray_dense']
     drop_vol = 0
     for item in drop_list.values():
+        #print item.toString()
         drop_vol += item.fuel_mass / fuel_dense
         drop_vol += item.clad_mass / clad_dense
         drop_vol += item.gray_mass / gray_dense
@@ -96,7 +103,7 @@ def calc_core_flux(bottom_t, board_t):
 def calc_drop_heat(drop_list, assembly_id):
     assert isinstance(drop_list, dict)
     assert isinstance(assembly_id, dict)
-    drop_heat_for_each_assembly = [ (iass, item.sum()) for (iass, item) in drop_list.items() ] 
+    drop_heat_for_each_assembly = [ (iass, item.mass_sum()) for (iass, item) in drop_list.items() ] 
     rod_idx = []
     drop_heat_for_rod = []
     for (iass, assemblyHeat) in drop_heat_for_each_assembly:
@@ -109,7 +116,7 @@ def calc_pool_heat(drop_list):
     r = Const.dict['board_radious']
     sum = 0
     for item in drop_list.values():
-        sum += item.sum()
+        sum += item.heat_sum()
     sum /= (math.pi * r *r)
     return sum
 
@@ -126,3 +133,54 @@ def stupid_method(begin, end, q, n):
     print sum(ret)
     return ret
 
+STYLE = {
+    'fore':
+     {  
+         'black'    : 30,   
+         'red'      : 31,  
+         'green'    : 32, 
+         'yellow'   : 33,
+         'blue'     : 34, 
+         'purple'   : 35, 
+         'cyan'     : 36, 
+         'white'    : 37, 
+     },
+     
+     'back' :
+     {  
+         'black'     : 40, 
+         'red'       : 41, 
+         'green'     : 42, 
+         'yellow'    : 43, 
+         'blue'      : 44, 
+         'purple'    : 45, 
+         'cyan'      : 46,
+         'white'     : 47,
+     },
+     
+     'mode' :
+     { 
+         'mormal'    : 0, 
+         'bold'      : 1,
+         'underline' : 4,
+         'blink'     : 5,
+         'invert'    : 7,
+         'hide'      : 8,
+     },
+     
+     'default' :
+     {
+         'end' : 0,
+     },
+ }
+ 
+ 
+def print_with_style(string, mode = '', fore = '', back = ''):
+    mode  = '%s' % STYLE['mode'][mode] if STYLE['mode'].has_key(mode) else ''
+    fore  = '%s' % STYLE['fore'][fore] if STYLE['fore'].has_key(fore) else ''
+    back  = '%s' % STYLE['back'][back] if STYLE['back'].has_key(back) else ''
+    style = ';'.join([s for s in [mode, fore, back] if s])
+    style = '\033[%sm' % style if style else ''
+    end   = '\033[%sm' % STYLE['default']['end'] if style else ''
+    sys.stdout.write('%s%s%s' % (style, string, end))
+ 
