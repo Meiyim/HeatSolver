@@ -1,5 +1,6 @@
 import numpy as np
 import mesh as Mesh
+from numba import jit
 from petsc4py import PETSc
 
 class Solver(object):
@@ -47,6 +48,7 @@ class PetscSolver(Solver):
         pc.setType(PETSc.PC.Type.ILU)
         self._ksp.setPC(pc)
         #self.build_laplas_matrix(self._coefMatrixTemplate)
+
     def add_teporal_term(self, A, b, dt):
         for i in xrange(0, self._mesh.get_ncell()):
             vol = self._mesh.get_volumn(i)
@@ -77,7 +79,7 @@ class PetscSolver(Solver):
         flux = flux * np.array(areas)
         b.setValues(idx_array, flux, addv = True)
     def build_laplas_matrix(self, A):
-        print 'building laplas template...'
+        print('building laplas template...')
         for row in xrange(0, self._mesh.get_ncell()):
             nei = self._mesh.get_neighbour(row) 
             lens = self._mesh.get_neighbour_lenth(row)

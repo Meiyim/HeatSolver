@@ -2,13 +2,22 @@ import numpy as np
 import math
 import constant as Const
 import sys
+from numba import jit
+from numba import jitclass
+from numba import float64, int64
 
-
+spec = [
+    ('fuel_mass', float64),
+    ('clad_mass', float64),
+    ('gray_mass', float64),
+]
+@jitclass(spec)
 class Drop_mass(object):
     def __init__(self, f, c, g):
         self.fuel_mass = f
         self.clad_mass = c
         self.gray_mass = g
+    @property
     def heat_sum(self):
         return
     def mass_sum(self):
@@ -16,6 +25,7 @@ class Drop_mass(object):
     def toString(self):
         return '[fule] %e [clad] % e [gray] %e' % (self.fuel_mass, self.clad_mass, self.gray_mass)
 
+@jit
 def parse_input_file(filename):
     f = open(filename, 'r')
     line_counter = 0
@@ -33,6 +43,7 @@ def parse_input_file(filename):
         line_counter += 1
     yield t, ret
 
+@jit
 def core_status_generator(t_start, t_step):
     t = t_start
     water_history = np.array(Const.water_history)
@@ -49,6 +60,7 @@ def core_status_generator(t_start, t_step):
         yield  now_water, bottom_temp,  now_power_distribution
         t += t_step
 
+@jit
 def calSteamGr(dT,L):
     dT = abs(dT)
     beta = 0.00268
@@ -56,17 +68,20 @@ def calSteamGr(dT,L):
     niu = 12.37e-6
     rou = 0.598
     if dT < 1.e-10 or L < 1.e-10:
-        print 'Gr is zero or negative: dt: %f, L: %f' %(dT,L)
+        print('Gr is zero or negative: dt: %f, L: %f'%(dT,L) )
     return g*beta*dT*(L**3) /((niu/rou)**2) 
+
+@jit
 def calcSteamHeatTransferRate(Gr, Prf, L):
     mul = Gr*Prf
     lamda = Const.dict['lambda_steam']
     Nu = 0.0
     if Gr < 6.37e5 or Gr > 1.12e8:
-        print 'Gr did not confront corelation Gr: %e' % Gr
+        pass
     Nu = 0.747 * (mul) ** (1./6.)
     return   Nu * lamda / L
 
+@jit
 def calc_hcoef(T, L, Tf):
     Gr = calSteamGr(T - Tf, L)
     Pr_fluid = Const.dict['Pr_steam']
@@ -75,7 +90,7 @@ def calc_hcoef(T, L, Tf):
     return 1000.0
 
 def calc_melted_volumn(mask, mesh):
-    return sum( map(lambda idx: mesh.get_volumn(idx), mask) )
+    return sum(map(lambda idx: mesh.get_volumn(idx), mask))
 
 def calc_drop_volumn(drop_list):
     fuel_dense = Const.dict['fuel_dense']
@@ -89,6 +104,7 @@ def calc_drop_volumn(drop_list):
         drop_vol += item.gray_mass / gray_dense
     return drop_vol
 
+@jit
 def calc_core_flux(bottom_t, board_t):
     #distance = Const.dict['bottom_board_distance']
     sigma = Const.dict['bottom_sigma']
@@ -101,8 +117,8 @@ def calc_core_flux(bottom_t, board_t):
 
 
 def calc_drop_heat(drop_list, assembly_id):
-    assert isinstance(drop_list, dict)
-    assert isinstance(assembly_id, dict)
+    #assert isinstance(drop_list, dict)
+    #assert isinstance(assembly_id, dict)
     drop_heat_for_each_assembly = [ (iass, item.mass_sum()) for (iass, item) in drop_list.items() ] 
     rod_idx = []
     drop_heat_for_rod = []
@@ -112,6 +128,7 @@ def calc_drop_heat(drop_list, assembly_id):
     return rod_idx, drop_heat_for_rod
 
 
+@jit
 def calc_pool_heat(drop_list):
     r = Const.dict['board_radious']
     sum = 0
@@ -120,6 +137,7 @@ def calc_pool_heat(drop_list):
     sum /= (math.pi * r *r)
     return sum
 
+@jit
 def stupid_method(begin, end, q, n):
     p =  (1 - q ** n)/(1 - q) 
     ret = np.empty((n))
@@ -130,7 +148,6 @@ def stupid_method(begin, end, q, n):
         ret[i] = ret[i-1] * q  + total
     for i in xrange(1, n):
         ret[i] += ret[i-1]
-    print sum(ret)
     return ret
 
 STYLE = {

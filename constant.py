@@ -1,11 +1,11 @@
 
 dict = {
     'total_power': 3.15e9, # W
-    'global_rou': 7020, # kg/m-3
-    'global_cp': 835, # J/(kg * K)
+    'global_rou': 7020.0, # kg/m-3
+    'global_cp': 835.0, # J/(kg * K)
     'global_epsilong': 0.8,
-    'global_lamda':25, # W /(m * K)
-    'global_melt_point':1600, #K 
+    'global_lamda':25.0, # W /(m * K)
+    'global_melt_point':1600.0, #K 
     'board_radious': 3.63, #m
     'board_thick': 0.415, #m
     'bottom_board_distance':0.079, #m
