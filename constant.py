@@ -11,7 +11,7 @@ dict = {
     'bottom_board_distance':0.079, #m
     'bottom_sigma':5.67e-8, #W/(m^2 * K^4)
     'bottom_epsi': 0.8, 
-    'nr': 54, #
+    'nr': 270, #
     'nt': 72, #
     'nz': 30, #
     'radious_increase_ratio': 0.995,

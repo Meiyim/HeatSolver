@@ -3,18 +3,9 @@ import numpy as np
 import itertools
 import utility as uti
 from numba import jit
-from numba import jitclass
 from numba import int64, float64
 
 #declare
-spec = [
-    ('lamda', float64),
-    ('rou', float64),
-    ('cp', float64),
-    ('melt_point', float64),
-    ('sigma', float64),
-]
-@jitclass(spec)
 class Material(object):
     def __init__(self, lamda, rou, cp, mp, sigma = 0.0):
         self.lamda = lamda
@@ -81,7 +72,6 @@ class StructuredMesh3D(Mesh):
         return self.get_position3d(cord)
     def get_position3d(self, cord):
         pass
-    @jit
     def get_index(self, cord): #None able
         x, y, z = cord
         if 0 <= x < self._nx and 0<= y < self._ny and 0 <= z < self._nz :
@@ -90,7 +80,6 @@ class StructuredMesh3D(Mesh):
                    z
         else:
             return None
-    @jit
     def get_neighbour3d(self, cord):
         i, j, k = cord
         return (self.get_index((i+1, j, k)),
@@ -100,13 +89,11 @@ class StructuredMesh3D(Mesh):
                 self.get_index((i, j, k+1)),
                 self.get_index((i, j, k-1)),
                )
-    @jit
     def get_neighbour(self, idx):
         cord = self.get_3d_index(idx)
         ret = self.get_neighbour3d(cord)
         return ret
 
-    @jit
     def get_neighbour_length3d(self, cord):
         i, j, k = cord
         ret =  ( self._cordinatex[(i + 1) % self._nx] - self._cordinatex[i],
@@ -117,31 +104,24 @@ class StructuredMesh3D(Mesh):
                  self._cordinatez[(k - 1) % self._nz] - self._cordinatez[k],
                )
         return ret
-    @jit
     def get_neighbour_lenth(self, idx):
         cord = self.get_3d_index(idx)
         return self.get_neighbour_length3d(cord)
-    @jit
     def d_cordinate_center(self, cord):
         dx1, dx2, dy1, dy2, dz1, dz2 = self.get_neighbour_length3d(cord)
         return (dx1+dx2)/2, (dy1+dy2)/2, (dz1+dz2)/2
-    @jit
     def get_volumn3d(self, cord):
         dx, dy, dz = self.d_cordinate_center(cord)
         return dx * dy * dz
-    @jit
     def get_volumn(self, idx):
         cord = self.get_3d_index(idx)
         return self.get_volumn3d(cord)
-    @jit
     def get_neighbour_area3d(self, cord):
         dx, dy, dz = self.d_cordinate_center(cord)
         return dy*dz, dy*dz, dx*dz, dx*dz, dy*dz, dy*dz
-    @jit
     def get_neighbour_area(self, i):
         cord = self.get_3d_index(i)
         return self.get_neighbour_area3d(cord)
-    @jit
     def get_neighbour_coef(self, i):
         return self._basic_material.lamda
 
