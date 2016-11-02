@@ -11,6 +11,9 @@ dict = {
     'bottom_board_distance':0.079, #m
     'bottom_sigma':5.67e-8, #W/(m^2 * K^4)
     'bottom_epsi': 0.8, 
+    'rod_radious': 0.0095, #m
+    'reference_ST_number': 0.0033,
+    'core_height': 3.657, #m
     'nr': 270, #
     'nt': 72, #
     'nz': 30, #
@@ -19,10 +22,17 @@ dict = {
     'T_steam': 500,
     'Pr_steam': 1.003, 
     'Pr_wall': 1.1, # imaginary
+    'gravity': 9.8, # m / s ^ 2
     'lambda_steam': 0.025, # W/(m * K)
     'fuel_dense': 8740, # kg / (m^3)
     'clad_dense': 5990, # kg / (m^3)
     'gray_dense': 7020, # kg / (m^3)
+    'fule_cp': 535,# J/(kg * K)
+    'clad_cp': 645,# J/(kg * K)
+    'gray_cp': 835,# J/(kg * K)
+    # output control
+    'output_step': 50, 
+    'restart_step': 100,
  }
 
 

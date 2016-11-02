@@ -1,32 +1,57 @@
 import numpy as np
+import struct
+import os
 import math
 import constant as Const
 from numba import jit
 from numba import float64, int64
 import sys
 
+@jit (float64(float64, float64, float64, 
+     float64, float64, float64,
+     float64, float64, float64,
+     float64,float64,float64))
+def _calc_drop_heat(mf, mc, mg, rf, rc, rg, cpf, cpc, cpg, g, height, St):
+    mass_sum = mf + mc + mg 
+    if mass_sum < 1.e-8:
+        return 0
+    vsum = mf / rf + \
+           mc / rc + \
+           mg / rg
+    dense = mass_sum / vsum
+    cp = (mf * cpf) / mass_sum + \
+         (mc * cpc) / mass_sum + \
+         (mg * cpg) / mass_sum
+    height /= 2
+    velocity = math.sqrt(2 * g * height)
+    hcoef = St * dense * velocity * cp
+    area = vsum / height
+    return area * hcoef
+
 class Drop_mass(object):
     def __init__(self, f, c, g):
         self.fuel_mass = f
         self.clad_mass = c
         self.gray_mass = g
-    @property
-    def heat_sum(self):
-        return
+    def drop_heat(self):
+        return _calc_drop_heat(self.fuel_mass, self.clad_mass, self.gray_mass,
+                              Const.dict['fuel_dense'], Const.dict['clad_dense'], Const.dict['gray_dense'],
+                              Const.dict['fule_cp'], Const.dict['clad_cp'], Const.dict['gray_cp'],
+                              Const.dict['gravity'], Const.dict['core_height'], Const.dict['reference_ST_number'])
     def mass_sum(self):
         return self.fuel_mass + self.clad_mass + self.gray_mass
     def toString(self):
         return '[fule] %e [clad] % e [gray] %e' % (self.fuel_mass, self.clad_mass, self.gray_mass)
-
  
-def parse_input_file(filename):
+def parse_input_file(filename, restart_step):
     f = open(filename, 'r')
     line_counter = 0
     ret = {}
     t = 0
     for line in f:
         if line_counter % 53 == 0:
-            yield t, ret
+            if t  >= restart_step:
+                yield t, ret
             t = float(line)
             ret = {}
         else:
@@ -35,9 +60,8 @@ def parse_input_file(filename):
             ret[iass] =  Drop_mass(float(arr[1]), float(arr[2]), float(arr[3]))
         line_counter += 1
     yield t, ret
-
  
-def core_status_generator(t_start, t_step):
+def core_status_generator(t_start, t_step, restart_time):
     t = t_start
     water_history = np.array(Const.water_history)
     power_history = np.array(Const.power_history)
@@ -50,7 +74,8 @@ def core_status_generator(t_start, t_step):
         now_power = np.interp(t, power_history[:, 0], power_history[:, 1])
         bottom_temp = np.interp(t, bottom_history[:, 0], bottom_history[:, 1])
         now_power_distribution = basic_power_sum * now_power * np.array(radial_factor)
-        yield  now_water, bottom_temp,  now_power_distribution
+        if t >= restart_time:
+            yield  now_water, bottom_temp,  now_power_distribution
         t += t_step
 
 @jit(float64(float64, float64), nopython=True)
@@ -83,9 +108,6 @@ def calc_hcoef(T, L, Tf):
     h = calcSteamHeatTransferRate(Gr, Pr_fluid, L)
     return 1000.0
 
-def calc_melted_volumn(mask, mesh):
-    return sum(map(lambda idx: mesh.get_volumn(idx), mask))
-
 def calc_drop_volumn(drop_list):
     fuel_dense = Const.dict['fuel_dense']
     clad_dense = Const.dict['clad_dense']
@@ -108,11 +130,14 @@ def calc_core_flux(bottom_t, board_t):
     qcov = 0.0
     return  qrad + qcov
 
-
 def calc_drop_heat(drop_list, assembly_id):
     #assert isinstance(drop_list, dict)
     #assert isinstance(assembly_id, dict)
-    drop_heat_for_each_assembly = [ (iass, item.mass_sum()) for (iass, item) in drop_list.items() ] 
+    drop_heat_for_each_assembly = [(iass, item.drop_heat()) for (iass, item) in drop_list.items() ] 
+    sum_heat = reduce(lambda (k1,v1), (k2,v2): v1 + v2, drop_heat_for_each_assembly.items())
+    sum_mass = sum([item.mass_sum for item in drop_list ])
+    uti.print_with_style('[drop]', mode = 'bold', fore = 'purple')
+    print 'drop heat %e mass %e' % (sum_heat, sum_mass)
     rod_idx = []
     drop_heat_for_rod = []
     for (iass, assemblyHeat) in drop_heat_for_each_assembly:
@@ -127,6 +152,12 @@ def calc_pool_heat(drop_list):
         sum += item.heat_sum()
     sum /= (math.pi * r *r)
     return sum
+
+def calc_hole_volumn():
+    r = Const.dict['rod_radious']
+    areahole = math.pi * r ** 2
+    nrod = len(Const.assembly_pos)
+    return nrod * areahole * Const.dict['board_thick']
  
 def stupid_method(begin, end, q, n):
     p =  (1 - q ** n)/(1 - q) 
@@ -140,6 +171,34 @@ def stupid_method(begin, end, q, n):
         ret[i] += ret[i-1]
     return ret
 
+def save(step, temp_array):
+    title = 'sav/rst_%d.npy' % step
+    _f = open(title,'wb')
+    data = struct.pack('i',step)
+    _f.write(data)
+    np.save(_f, temp_array)
+
+def load(temp_array):
+    ret = os.popen('ls sav/').read()
+    arr = ret.split()
+    if len(arr) !=0 :
+        filename = arr[-1]
+        print 'restarting from %s... ?' % filename
+        input = raw_input()
+        while input != 'yes' and input != 'y':
+            input = raw_input()
+        try: 
+            _f = open('sav/'+filename)
+            data = _f.read(struct.calcsize('i') )
+            step, = struct.unpack('i', data)
+            temp_array[:]  = np.load(_f)[:] 
+            return step
+        except IOError:
+            print 'cannot open file %s... abort' % filename 
+            exit()
+    else:
+        print 'new start'
+        return 0
 STYLE = {
     'fore':
      {  

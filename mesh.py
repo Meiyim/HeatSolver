@@ -224,6 +224,10 @@ class CylinderlMesh(StructuredMesh3D):
             return idx
         self._upper_boundary = [_find_upper(idx) for idx in self._upper_boundary ]
         return self._upper_boundary
+
+    def calc_melted_volumn(self, melted_set):
+        return sum(map(lambda idx: self.get_volumn(idx), melted_set))
+
     def tecplot_str(self, var):
         tec_text = []
         tec_text.append('title = supporting board')
