@@ -77,7 +77,7 @@ class PetscSolver(Solver):
     def set_upper_flux(self, b, idx_array, flux):
         areas = [self._mesh.get_neighbour_area(idx)[4] for idx in idx_array]
         flux = flux * np.array(areas)
-        b.setValues(idx_array, flux, addv = True)
+        b.setValues(idx_array, 0. - flux, addv = True)
     def build_laplas_matrix(self, A):
         print('building laplas template...')
         for row in xrange(0, self._mesh.get_ncell()):

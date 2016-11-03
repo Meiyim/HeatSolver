@@ -12,11 +12,16 @@ import utility as uti
 from numba import jit
 import crash_on_ipy
 
+last_melt_volumn = 0
+last_pool_volumn = 0
 def summary(now, T, mv, pv, status):
-    uti.print_with_style('[time %f] ' % now ,mode = 'bold', fore = 'red' )
-    uti.print_with_style('max T %e min %e ave %e ' % (T.max(), T.min(), T.mean()) )
+    global last_melt_volumn, last_pool_volumn
+    uti.print_with_style('[time %8f] ' % now ,mode = 'bold', fore = 'red' )
+    uti.print_with_style('max T %10e min %10e ave %10e ' % (T.max(), T.min(), T.mean()) )
     uti.print_with_style('[melt]',  mode = 'bold', fore = 'red' )
-    uti.print_with_style('melt_v %e pool_v %e\n' % (mv, pv))
+    uti.print_with_style('melt_v %10e(+%10e) pool_v %10e(+%10e)\n' % (mv, mv-last_melt_volumn, pv, pv-last_pool_volumn))
+    last_melt_volumn = mv
+    last_pool_volumn = pv
     if status == 0:
         uti.print_with_style('[filling hole]\n', mode = 'bold', fore = 'green' )
     elif status == 1:
@@ -83,7 +88,7 @@ def main():
     print('start solving')
     #restart
     time_step = uti.load(solver.get_T())
-    for (t, drop_list),(now_water, bottom_t, now_power_distribution) in zip(uti.parse_input_file('melt_mass.dat', time_step), uti.core_status_generator(0.0, 1.0, time_step)):
+    for (t, drop_list),(now_water, bottom_t, now_power_distribution) in zip(uti.parse_input_file('melt_history', time_step), uti.core_status_generator(0.0, 1.0, time_step)):
         now = time.time()
         print('[%d] solving... time consumed %e' % (time_step, now - time_check))
         time_check = now
@@ -97,17 +102,19 @@ def main():
         #down_side
         T_down_mean = np.array([ T[idx] for idx in  down_id]).mean()
         h = uti.calc_hcoef(T_down_mean, corelation_length, T_steam)
-        solver.set_down_side(A_, b_, 0.0, h * (T_down_mean - T_steam ), T_steam)
+        flux_down = h * (T_down_mean - T_steam)
+        print 'heat coef steam %10e flux' % h
+        solver.set_down_side(A_, b_, 0.0, flux_down, T_steam)
         #up_side
         melted_set = solver.update_mask()
         melted_set_sum = melted_set_sum | melted_set
         upper_surface_idx = mesh.get_upper_surface(melted_set_sum)    
         melted_volumn += mesh.calc_melted_volumn(melted_set)
         T_up_mean = np.array([ T[idx] for idx in upper_surface_idx] ).mean()
-        if pool_volumn < melted_volumn + 1.e-5:    
+        if pool_volumn < melted_volumn:
             #core
             flux_from_core = uti.calc_core_flux(bottom_t, T_up_mean)
-            print('core flux: %e' % flux_from_core)
+            print('core flux: %10e' % flux_from_core)
             solver.set_upper_flux(b_, upper_surface_idx, flux_from_core)
             if pool_volumn < hole_volumn:
                 board_status = 0

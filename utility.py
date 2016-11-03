@@ -106,7 +106,7 @@ def calc_hcoef(T, L, Tf):
     Pr_fluid = Const.dict['Pr_steam']
     Pr_wall = Const.dict['Pr_wall']
     h = calcSteamHeatTransferRate(Gr, Pr_fluid, L)
-    return 1000.0
+    return h
 
 def calc_drop_volumn(drop_list):
     fuel_dense = Const.dict['fuel_dense']
@@ -126,7 +126,7 @@ def calc_core_flux(bottom_t, board_t):
     epsi = Const.dict['bottom_epsi']
     r = Const.dict['board_radious']
     area = math.pi * r * r
-    qrad = area * sigma * epsi * (bottom_t ** 4 - board_t ** 4)
+    qrad = area * sigma * epsi * (board_t ** 4 - bottom_t ** 4 )
     qcov = 0.0
     return  qrad + qcov
 
@@ -179,9 +179,9 @@ def save(step, temp_array):
     np.save(_f, temp_array)
 
 def load(temp_array):
-    ret = os.popen('ls sav/').read()
+    ret = os.popen("ls -lt sav/ | awk '{print $10}'").read()
     arr = ret.split()
-    if len(arr) !=0 :
+    if len(arr) > 1 :
         filename = arr[-1]
         print 'restarting from %s... ?' % filename
         input = raw_input()
