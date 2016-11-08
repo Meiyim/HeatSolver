@@ -1,5 +1,6 @@
 import numpy as np
 import mesh as Mesh
+import utility as uti
 from numba import jit
 from petsc4py import PETSc
 
@@ -79,7 +80,7 @@ class PetscSolver(Solver):
         flux = flux * np.array(areas)
         b.setValues(idx_array, 0. - flux, addv = True)
     def build_laplas_matrix(self, A):
-        print('building laplas template...')
+        uti.log('building laplas template...')
         for row in xrange(0, self._mesh.get_ncell()):
             nei = self._mesh.get_neighbour(row) 
             lens = self._mesh.get_neighbour_lenth(row)
@@ -139,7 +140,7 @@ class PetscSolver(Solver):
         if self._ksp.getConvergedReason() < 0:
             raise ValueError('iteration not converged')
         #else:
-           # print 'iteration converged in %d step' % ksp.getIterationNumber()
+           # uti.log 'iteration converged in %d step' % ksp.getIterationNumber()
         self._T[:] = self._xsol.getArray()
         return self._T
 

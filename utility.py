@@ -2,6 +2,7 @@ import numpy as np
 import struct
 import os
 import math
+import pickle
 import constant as Const
 from numba import jit
 from numba import float64, int64
@@ -86,7 +87,7 @@ def calSteamGr(dT,L):
     niu = 12.37e-6
     rou = 0.598
     if dT < 1.e-10 or L < 1.e-10:
-        print('Gr is zero or negative')
+        print ('Gr is zero or negative')
     return g*beta*dT*(L**3) /((niu/rou)**2) 
 
  
@@ -98,14 +99,28 @@ def calcSteamHeatTransferRateCore(Gr, Prf, L, lamda):
         pass
     Nu = 0.747 * (mul) ** (1./6.)
     return   Nu * lamda / L
-def calcSteamHeatTransferRate(Gr, Prf, L): 
-    return calcSteamHeatTransferRateCore(Gr, Prf, L, Const.dict['lambda_steam'])
+
+@jit(float64(float64, float64, float64, float64, float64), nopython=True)
+def calcSteamHeatTransferRateCore2(Gr, Prf, Prw, L, lamda):
+    mul = Gr*Prf
+    Nu = 0.0
+    if mul<1e3:
+        pass
+        #uti.mpi_print('Gr, Pr steam  didnt confront Correlation\n Pr * Gr == %f!' , mul, my_rank)
+    if 1e3 < mul < 1e10:
+        Nu = 0.6 * (mul)**0.25 * (Prf/Prw) ** (0.25)
+    if mul >=1e10:
+        Nu = 0.15 * (mul)**0.333 * (Prf/Prw) ** (0.25)
+    return   Nu * lamda / L
+
+def calcSteamHeatTransferRate(Gr, Prf, Prw, L): 
+    return calcSteamHeatTransferRateCore2(Gr, Prf, Prw, L, Const.dict['lambda_steam'])
  
 def calc_hcoef(T, L, Tf):
     Gr = calSteamGr(T - Tf, L)
     Pr_fluid = Const.dict['Pr_steam']
     Pr_wall = Const.dict['Pr_wall']
-    h = calcSteamHeatTransferRate(Gr, Pr_fluid, L)
+    h = calcSteamHeatTransferRate(Gr, Pr_fluid, Pr_wall, L)
     return h
 
 def calc_drop_volumn(drop_list):
@@ -134,10 +149,12 @@ def calc_drop_heat(drop_list, assembly_id):
     #assert isinstance(drop_list, dict)
     #assert isinstance(assembly_id, dict)
     drop_heat_for_each_assembly = [(iass, item.drop_heat()) for (iass, item) in drop_list.items() ] 
-    sum_heat = reduce(lambda (k1,v1), (k2,v2): v1 + v2, drop_heat_for_each_assembly.items())
-    sum_mass = sum([item.mass_sum for item in drop_list ])
-    uti.print_with_style('[drop]', mode = 'bold', fore = 'purple')
-    print 'drop heat %e mass %e' % (sum_heat, sum_mass)
+    sum_heat = 0
+    for (iass, heat) in drop_heat_for_each_assembly:
+        sum_heat += heat
+    sum_mass = sum([item.mass_sum() for (iass, item) in drop_list.items() ])
+    print_with_style('[drop]', mode = 'bold', fore = 'purple')
+    log( 'drop heat %e mass %e' % (sum_heat, sum_mass) )
     rod_idx = []
     drop_heat_for_rod = []
     for (iass, assemblyHeat) in drop_heat_for_each_assembly:
@@ -149,7 +166,7 @@ def calc_pool_heat(drop_list):
     r = Const.dict['board_radious']
     sum = 0
     for item in drop_list.values():
-        sum += item.heat_sum()
+        sum += item.drop_heat()
     sum /= (math.pi * r *r)
     return sum
 
@@ -171,34 +188,33 @@ def stupid_method(begin, end, q, n):
         ret[i] += ret[i-1]
     return ret
 
-def save(step, temp_array):
-    title = 'sav/rst_%d.npy' % step
+def save(status, temp_array):
+    title = 'sav/rst_%d.npy' % status['time_step']
     _f = open(title,'wb')
-    data = struct.pack('i',step)
-    _f.write(data)
+    #data = struct.pack('i',step)
+    pickle.dump(status, _f)
     np.save(_f, temp_array)
 
 def load(temp_array):
-    ret = os.popen("ls -lt sav/ | awk '{print $10}'").read()
+    ret = os.popen("ls -lt sav/ | awk '{print $9}'").read()
     arr = ret.split()
-    if len(arr) > 1 :
-        filename = arr[-1]
+    if len(arr) > 0 :
+        filename = arr[0]
         print 'restarting from %s... ?' % filename
         input = raw_input()
         while input != 'yes' and input != 'y':
             input = raw_input()
         try: 
             _f = open('sav/'+filename)
-            data = _f.read(struct.calcsize('i') )
-            step, = struct.unpack('i', data)
+            status = pickle.load(_f)
             temp_array[:]  = np.load(_f)[:] 
-            return step
+            return status
         except IOError:
             print 'cannot open file %s... abort' % filename 
             exit()
     else:
         print 'new start'
-        return 0
+
 STYLE = {
     'fore':
      {  
@@ -249,4 +265,13 @@ def print_with_style(string, mode = '', fore = '', back = ''):
     style = '\033[%sm' % style if style else ''
     end   = '\033[%sm' % STYLE['default']['end'] if style else ''
     sys.stdout.write('%s%s%s' % (style, string, end))
+    logfile.write(string.strip() + '\n')
+
+logfile = open('log', 'w')
+def log(str):
+    text = str.strip() + '\n'
+    logfile.write(text)
+    sys.stdout.write(text)
+
+    
  

@@ -12,26 +12,25 @@ import utility as uti
 from numba import jit
 import crash_on_ipy
 
-last_melt_volumn = 0
-last_pool_volumn = 0
-def summary(now, T, mv, pv, status):
-    global last_melt_volumn, last_pool_volumn
+last_mv = 0
+last_pv = 0
+def summary(now, T, status):
+    global last_mv, last_pv
     uti.print_with_style('[time %8f] ' % now ,mode = 'bold', fore = 'red' )
     uti.print_with_style('max T %10e min %10e ave %10e ' % (T.max(), T.min(), T.mean()) )
     uti.print_with_style('[melt]',  mode = 'bold', fore = 'red' )
-    uti.print_with_style('melt_v %10e(+%10e) pool_v %10e(+%10e)\n' % (mv, mv-last_melt_volumn, pv, pv-last_pool_volumn))
-    last_melt_volumn = mv
-    last_pool_volumn = pv
-    if status == 0:
+    uti.print_with_style('melt_v %10e(+%10e) pool_v %10e(+%10e)\n' % (status['melted_volumn'], status['melted_volumn'] - last_mv, status['pool_volumn'], status['pool_volumn']-last_pv))
+    last_mv = status['melted_volumn']
+    last_pv = status['pool_volumn']
+    if status['board'] == 0:
         uti.print_with_style('[filling hole]\n', mode = 'bold', fore = 'green' )
-    elif status == 1:
+    elif status['board'] == 1:
         uti.print_with_style('[jet impinging...]\n', mode = 'bold', fore = 'green' )
-    elif status == 2:
+    elif status['board'] == 2:
         uti.print_with_style('[pooling]\n', mode = 'bold', fore = 'green' )
     else:
         pass
         
-
 def main():
     mat = Mesh.Material(
         Const.dict['global_lamda'], 
@@ -67,17 +66,18 @@ def main():
     corelation_length = down_area / down_board_length
     
     #record object
-    board_status = 0 # filling hole,  jet, pool
+    status = {}
+    status['board'] = 0 # filling hole,  jet, pool
     time_check = time.time()
-    time_step = 0
-    pool_volumn = 0
-    melted_set_sum = set()
-    melted_set = set()
+    status['time_step'] = 0
+    status['pool_volumn'] = 0
+    status['melted_set'] = set()
+    status['melted_set_sum'] = set()
     hole_volumn = uti.calc_hole_volumn()
-    melted_volumn =  hole_volumn
+    status['melted_volumn'] =  hole_volumn
 
 
-    print('prepare solving')
+    uti.log('prepare solving')
 
     solver = Solver.PetscSolver(mesh)
     solver.allocate(Const.dict['T_init'])
@@ -85,16 +85,21 @@ def main():
 
     A, b = solver.get_template()
     solver.build_laplas_matrix(A)
-    print('start solving')
+    uti.log('start solving')
     #restart
-    time_step = uti.load(solver.get_T())
-    for (t, drop_list),(now_water, bottom_t, now_power_distribution) in zip(uti.parse_input_file('melt_history', time_step), uti.core_status_generator(0.0, 1.0, time_step)):
+    rst_stat =  uti.load(solver.get_T())
+    if rst_stat is not None:
+        status = rst_stat
+    for (t, drop_list), (now_water, bottom_t, now_power_distribution) \
+            in zip(uti.parse_input_file('melt_history', status['time_step']), \
+            uti.core_status_generator(0.0, 1.0, status['time_step'])):
+        status['time_step']  = t
         now = time.time()
-        print('[%d] solving... time consumed %e' % (time_step, now - time_check))
+        uti.log('[%d] solving... time consumed %e' % (t, now - time_check))
         time_check = now
-        pool_volumn += uti.calc_drop_volumn(drop_list)
-        if len(melted_set) != 0:
-            solver.set_mask(melted_set)
+        status['pool_volumn'] += uti.calc_drop_volumn(drop_list)
+        if len(status['melted_set']) != 0:
+            solver.set_mask(status['melted_set'])
         T = solver.get_T()
         #temporal_term
         A_, b_ = solver.duplicate_template()
@@ -103,43 +108,43 @@ def main():
         T_down_mean = np.array([ T[idx] for idx in  down_id]).mean()
         h = uti.calc_hcoef(T_down_mean, corelation_length, T_steam)
         flux_down = h * (T_down_mean - T_steam)
-        print 'heat coef steam %10e flux' % h
+        uti.log ('heat coef steam %10e flux' % h)
         solver.set_down_side(A_, b_, 0.0, flux_down, T_steam)
         #up_side
-        melted_set = solver.update_mask()
-        melted_set_sum = melted_set_sum | melted_set
-        upper_surface_idx = mesh.get_upper_surface(melted_set_sum)    
-        melted_volumn += mesh.calc_melted_volumn(melted_set)
+        status['melted_set'] = solver.update_mask()
+        status['melted_set_sum'] = status['melted_set_sum'] | status['melted_set']
+        upper_surface_idx = mesh.get_upper_surface(status['melted_set_sum'])    
+        status['melted_volumn'] += mesh.calc_melted_volumn(status['melted_set'])
         T_up_mean = np.array([ T[idx] for idx in upper_surface_idx] ).mean()
-        if pool_volumn < melted_volumn:
+        uti.log('down temp %e up temp %e' % (T_down_mean, T_up_mean))
+        if status['pool_volumn'] < status['melted_volumn']:
             #core
             flux_from_core = uti.calc_core_flux(bottom_t, T_up_mean)
-            print('core flux: %10e' % flux_from_core)
+            uti.log('core flux: %10e' % flux_from_core)
             solver.set_upper_flux(b_, upper_surface_idx, flux_from_core)
-            if pool_volumn < hole_volumn:
-                board_status = 0
-            else:
+            #if status['pool_volumn'] < hole_volumn:
+            #    status['board'] = 0
+            #else:
                 # drop 
-                board_status = 1
-                rod_idx, drop_heat_for_rod = uti.calc_drop_heat(drop_list, assembly_id)
-                solver.set_heat_point(b_, rod_idx, drop_heat_for_rod)
+            status['board'] = 1
+            rod_idx, drop_heat_for_rod = uti.calc_drop_heat(drop_list, assembly_id)
+            solver.set_heat_point(b_, rod_idx, drop_heat_for_rod)
         else: #pool cover the bottom
-            board_status = 2
+            status['board'] = 2
             flux_from_pool = uti.calc_pool_heat(drop_list)        
-            print('pool flux %e' % flux_from_pool )
+            uti.log('pool flux %e' % flux_from_pool )
             solver.set_upper_flux(b_, upper_surface_idx, flux_from_pool)  
         # other boundary goes here
         # solve
         T = solver.solve(1.e-6, 100)
-        summary(t, T, melted_volumn, pool_volumn, board_status)
+        summary(t, T, status)
         #post
-        if time_step % Const.dict['output_step'] == 0:
+        if t  % Const.dict['output_step'] == 0:
             uti.print_with_style('[tecploting...]', mode = 'bold', fore = 'blue')
-            str_buffer = mesh.tecplot_str(T)
-            open('tec/tec_%d.dat' % time_step, 'w').write(str_buffer)
-        if time_step % Const.dict['restart_step'] == 0:
-            uti.save(time_step, T)
-        time_step += 1
+            str_buffer = mesh.tecplot_str(T, status)
+            open('tec/tec_%d.dat' % t, 'w').write(str_buffer)
+        if t  % Const.dict['restart_step'] == 0:
+            uti.save(status, T)
 
 if __name__ == '__main__':
     main()

@@ -131,12 +131,12 @@ class CylinderlMesh(StructuredMesh3D):
         dr /= 2
         dz = z / float(iz)
         dz /= 2
-        print ('begin %f end %f ratio %e' % (dr, r-dr, qr) )
+        uti.log('begin %f end %f ratio %e' % (dr, r-dr, qr) )
         super(CylinderlMesh, self).__init__(ir, it, iz, dr, r-dr, 0., 2 * math.pi, dz, z - dz)
         self._cordinatex = uti.stupid_method(dr, r-dr, qr, ir)
         self._cordinatex = np.hstack((self._cordinatex, np.array((r+dr, -dr))))
         self._cordinatez = np.hstack((self._cordinatez, np.array((z+dz, -dz))))
-        print ('CHECK CORDINATE R: %s' % str(self._cordinatex))
+        uti.log('CHECK CORDINATE R: %s' % str(self._cordinatex))
         upper_bound = set(
             [self.get_index(cord)  for cord in itertools.product(xrange(0, ir), xrange(0, it), xrange(iz - 1, iz)) ]
         )
@@ -228,20 +228,22 @@ class CylinderlMesh(StructuredMesh3D):
     def calc_melted_volumn(self, melted_set):
         return sum(map(lambda idx: self.get_volumn(idx), melted_set))
 
-    def tecplot_str(self, var):
+    def tecplot_str(self, var, status):
         tec_text = []
         tec_text.append('title = supporting board')
         tec_text.append('ZONE I=%d, J=%d, K=%d, F=point' % (self._nz, self._ny, self._nx + 1))
         #a fake center
         center_idx  = [self.get_index((0, 0, k)) for k in xrange(0, self._nz)]
         varcenter = np.array([var[idx] for idx in center_idx])
+        statcenter = map(lambda idx: 0 if idx in status['melted_set_sum'] else 1, center_idx)
         for j in xrange(0, self._ny):
             for k in xrange(0, self._nz):
-                tec_text.append('%e %e %e %e' % (0., 0., 0., varcenter[k]))
+                tec_text.append('%e %e %e %e %d' % (0., 0., 0., varcenter[k], statcenter[k]))
         for i in xrange(0, self._nx):
             for j in xrange(0, self._ny):
                 for k in xrange(0, self._nz):
                     idx = self.get_index((i, j, k))
-                    tec_text.append('%e %e %e %e' % ( self.get_position3d((i, j, k)) + (var[idx],) ))
+                    stat = 1 if idx in status['melted_set_sum'] else 0
+                    tec_text.append('%e %e %e %e %d' % (self.get_position3d((i, j, k)) + (var[idx], stat)))
         return '\n'.join(tec_text)
 
