@@ -9,6 +9,7 @@ import mesh as Mesh
 import solver as Solver
 import constant as Const
 import utility as uti
+from bintrees import RBTree
 from numba import jit
 import crash_on_ipy
 
@@ -54,6 +55,7 @@ def main():
     assembly_id = {}
     for x, y, iass in Const.assembly_pos:
         idx = mesh.get_bottom_index_at_position((x, y))
+        assert mesh.get_3d_index(idx)[2] == Const.dict['nz'] - 1
         assert idx is not None
         if assembly_id.get(iass) is None:
             assembly_id[iass] = [idx]
@@ -75,6 +77,7 @@ def main():
     status['melted_set_sum'] = set()
     hole_volumn = uti.calc_hole_volumn()
     status['melted_volumn'] =  hole_volumn
+    status['melted_set_tree'] = RBTree()
 
 
     uti.log('prepare solving')
@@ -88,11 +91,11 @@ def main():
     uti.log('start solving')
     #restart
     rst_stat =  uti.load(solver.get_T())
+    core_status = uti.core_status_generator(0.0, 1.0, status['time_step'])
     if rst_stat is not None:
         status = rst_stat
-    for (t, drop_list), (now_water, bottom_t, now_power_distribution) \
-            in zip(uti.parse_input_file('melt_history', status['time_step']), \
-            uti.core_status_generator(0.0, 1.0, status['time_step'])):
+    for t, drop_list in uti.parse_input_file('melt_history_short3', status['time_step']):
+        now_water, bottom_t, now_power_distribution = core_status.next()
         status['time_step']  = t
         now = time.time()
         uti.log('[%d] solving... time consumed %e' % (t, now - time_check))
@@ -103,12 +106,12 @@ def main():
         T = solver.get_T()
         #temporal_term
         A_, b_ = solver.duplicate_template()
-        solver.add_teporal_term(A_, b_, 1.0)
+        solver.add_teporal_term(A_, b_, 1.0 if t > 600 else 1000.0)
         #down_side
         T_down_mean = np.array([ T[idx] for idx in  down_id]).mean()
-        h = uti.calc_hcoef(T_down_mean, corelation_length, T_steam)
-        flux_down = h * (T_down_mean - T_steam)
-        uti.log ('heat coef steam %10e flux' % h)
+        h_steam = uti.calc_hcoef(T_down_mean, corelation_length, T_steam)
+        flux_down = h_steam * (T_down_mean - T_steam)
+        uti.log ('heat coef steam %10e flux' % h_steam)
         solver.set_down_side(A_, b_, 0.0, flux_down, T_steam)
         #up_side
         status['melted_set'] = solver.update_mask()
@@ -117,25 +120,44 @@ def main():
         status['melted_volumn'] += mesh.calc_melted_volumn(status['melted_set'])
         T_up_mean = np.array([ T[idx] for idx in upper_surface_idx] ).mean()
         uti.log('down temp %e up temp %e' % (T_down_mean, T_up_mean))
-        if status['pool_volumn'] < status['melted_volumn']:
-            #core
-            flux_from_core = uti.calc_core_flux(bottom_t, T_up_mean)
-            uti.log('core flux: %10e' % flux_from_core)
-            solver.set_upper_flux(b_, upper_surface_idx, flux_from_core)
-            #if status['pool_volumn'] < hole_volumn:
-            #    status['board'] = 0
-            #else:
-                # drop 
-            status['board'] = 1
-            rod_idx, drop_heat_for_rod = uti.calc_drop_heat(drop_list, assembly_id)
+
+        #from impingment
+        drop_point_temp = solver.get_drop_point_temp(assembly_id)
+        rod_idx, drop_heat_for_rod = uti.calc_drop_heat(drop_list, assembly_id, drop_point_temp)
+        if drop_heat_for_rod is not None:
+            uti.log('impinging')
             solver.set_heat_point(b_, rod_idx, drop_heat_for_rod)
-        else: #pool cover the bottom
-            status['board'] = 2
-            flux_from_pool = uti.calc_pool_heat(drop_list)        
-            uti.log('pool flux %e' % flux_from_pool )
-            solver.set_upper_flux(b_, upper_surface_idx, flux_from_pool)  
-        # other boundary goes here
-        # solve
+
+        status['board'] = 1 if status['pool_volumn'] < status['melted_volumn'] else 2
+
+        pool_bottom_surface_idx, pool_area = mesh.get_pool_bottom(status['melted_set'], status['melted_set_tree'], status['pool_volumn'])
+        #from core
+        flux_from_core = uti.calc_core_flux(bottom_t, T_up_mean, h_steam)
+        uti.log('core flux: %10e' % flux_from_core)
+        solver.set_upper_flux(b_, list(upper_surface_idx - pool_bottom_surface_idx), flux_from_core)
+
+        #debug
+        '''
+        for idx in upper_surface_idx:
+            assert mesh.get_3d_index(idx)[2] == Const.dict['nz'] - 1
+        barr = b_.getArray()
+        for idx in upper_surface_idx:
+            print barr[idx]
+            if idx in rod_idx:
+                print '************'
+                raw_input()
+        raw_input()
+        '''
+
+
+
+        #from pool
+        if pool_area != 0:
+            flux_from_pool = uti.calc_pool_heat(drop_list, pool_area)
+            uti.log('pool flux %10e' % flux_from_pool )
+            solver.set_upper_flux(b_, pool_bottom_surface_idx, flux_from_pool)  
+            # other boundary goes here
+            # solve
         T = solver.solve(1.e-6, 100)
         summary(t, T, status)
         #post

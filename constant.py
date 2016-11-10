@@ -6,12 +6,12 @@ dict = {
     'global_epsilong': 0.8,
     'global_lamda':25.0, # W /(m * K)
     'global_melt_point':1600.0, #K 
-    'board_radious': 3.63, #m
+    'board_radious': 3.63 / 2, #m
     'board_thick': 0.415, #m
     'bottom_board_distance':0.079, #m
     'bottom_sigma':5.67e-8, #W/(m^2 * K^4)
     'bottom_epsi': 0.8, 
-    'rod_radious': 0.0095, #m
+    'rod_radious': 0.0095 / 2, #m
     'reference_ST_number': 0.0033,
     'core_height': 3.657, #m
     'nr': 270, #
@@ -23,13 +23,18 @@ dict = {
     'Pr_steam': 1.003, 
     'Pr_wall': 1.1, # imaginary
     'gravity': 9.8, # m / s ^ 2
+    #material
     'lambda_steam': 0.025, # W/(m * K)
-    'fuel_dense': 8740, # kg / (m^3)
-    'clad_dense': 5990, # kg / (m^3)
-    'gray_dense': 7020, # kg / (m^3)
-    'fule_cp': 535,# J/(kg * K)
-    'clad_cp': 645,# J/(kg * K)
-    'gray_cp': 835,# J/(kg * K)
+    'fuel_dense': 8740.0, # kg / (m^3)
+    'clad_dense': 5990.0, # kg / (m^3)
+    'gray_dense': 7020.0, # kg / (m^3)
+    'fule_cp': 535.0,# J/(kg * K)
+    'clad_cp': 645.0,# J/(kg * K)
+    'gray_cp': 835.0,# J/(kg * K)
+    'fule_mp': 2911.0,# K
+    'clad_mp': 3113.0,# K
+    'gray_mp': 1600.0,# K
+    'core_epsi': 0.8, # 
     # output control
     'output_step': 50, 
     'restart_step': 100,

@@ -68,13 +68,14 @@ class PetscSolver(Solver):
         for area, idx in zip(area_array, idxs):
             A.setValues( idx, idx, area * h, addv = True)
         b.setValues(idxs, area_array * (h * Tf  - q ), addv = True)
+        uti.log('down_sum_heat %e' % sum(area_array * (h * Tf - q)))
         b.assemblyBegin()
         A.assemblyBegin()
         b.assemblyEnd()
         A.assemblyEnd()
     def set_heat_point(self, b, idx_array, heat_array):
         assert len(idx_array) == len(heat_array)
-        b.setValues(idx_array, heat_array, addv = True)
+        b.setValues(idx_array, 0. - np.array(heat_array), addv = True)
     def set_upper_flux(self, b, idx_array, flux):
         areas = [self._mesh.get_neighbour_area(idx)[4] for idx in idx_array]
         flux = flux * np.array(areas)
@@ -109,9 +110,9 @@ class PetscSolver(Solver):
         for idx in melted_mask:
             self._T[idx] = -1.0
             nei = filter(lambda v : v is not None,  self._mesh.get_neighbour(idx) )
-            A.setValues([idx], nei, 0.0, addv = False)
-            A.setValues(nei, [idx], 0.0, addv = False)
-        b.setValues(list(melted_mask), 0.0, addv = False)
+            A.setValues([idx], nei, [0.0] * len(nei), addv = False)
+            A.setValues(nei, [idx], [0.0] * len(nei), addv = False)
+        b.setValues(list(melted_mask), [0.0] * len(melted_mask), addv = False)
         A.assemblyBegin()
         b.assemblyBegin()
         A.assemblyEnd()
@@ -126,6 +127,11 @@ class PetscSolver(Solver):
             melt_point = self._mesh.get_material_at_index(i).melt_point
             if melt_point < temp:
                 ret.add(i)
+        return ret
+    def get_drop_point_temp(self, assembly_id):
+        ret = {}
+        for iass, idxs in assembly_id.items():
+            ret[iass] = sum([self._T[idx] for idx in idxs ]) / len(idxs)
         return ret
     def solve(self, rtol, max_iter):
         self._coefMatrix.assemblyBegin()

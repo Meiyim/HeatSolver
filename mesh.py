@@ -213,17 +213,45 @@ class CylinderlMesh(StructuredMesh3D):
                 r * dtheta * dr,
         )
         return ret
+
     def get_volumn3d(self, cord):
         dr, dtheta, dz = self.d_cordinate_center(cord)
         r = self._cordinatex[cord[0]]
         return r * dtheta * dr * dz
+
+    def down_step(self, idx):
+        return idx - 1 if self.get_3d_index(idx)[2] > 0 else None
     def get_upper_surface(self, melted_set):
         def _find_upper(idx):
             while idx in melted_set:
-                idx += 1#step
+                idx = self.down_step(idx)#step
             return idx
-        self._upper_boundary = [_find_upper(idx) for idx in self._upper_boundary ]
+        self._upper_boundary = set([_find_upper(idx) for idx in self._upper_boundary ])
+        if None in self._upper_boundary:
+            self._upper_boundary.remove(None)
         return self._upper_boundary
+
+    def get_pool_bottom(self, melted_set, melted_set_tree, pool_volumn):
+        # insert
+        cord_idx_pair = [ (self.get_3d_index(idx), idx) for idx in melted_set ]
+        #make h first
+        cord_idx_pair = [ ((z, y, x), idx) for ((x, y ,z), idx) in cord_idx_pair]
+        for (cord, idx) in cord_idx_pair:
+            melted_set_tree[cord] = idx
+        vol = 0
+        ret = set()
+        for cord, idx in melted_set_tree.items():
+            vol += self.get_volumn(idx)
+            if vol > pool_volumn:
+                break
+            else:
+                ret.add(idx)
+        ret = set([ self.down_step(idx) for idx in ret]) & self._upper_boundary
+        if len(ret) == 0:
+            return ret, 0
+        else:
+            return ret, sum([self.get_neighbour_area(idx)[4] for idx in ret])
+
 
     def calc_melted_volumn(self, melted_set):
         return sum(map(lambda idx: self.get_volumn(idx), melted_set))

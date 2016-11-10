@@ -4,6 +4,7 @@ import os
 import math
 import pickle
 import constant as Const
+from bintrees import RBTree
 from numba import jit
 from numba import float64, int64
 import sys
@@ -11,8 +12,10 @@ import sys
 @jit (float64(float64, float64, float64, 
      float64, float64, float64,
      float64, float64, float64,
-     float64,float64,float64))
-def _calc_drop_heat(mf, mc, mg, rf, rc, rg, cpf, cpc, cpg, g, height, St):
+     float64, float64, float64,
+     float64, float64, float64, 
+     float64, float64))
+def _calc_drop_heat(mf, mc, mg, rf, rc, rg, cpf, cpc, cpg, mpf, mpc, mpg, g, height, r, St, selft):
     mass_sum = mf + mc + mg 
     if mass_sum < 1.e-8:
         return 0
@@ -23,22 +26,32 @@ def _calc_drop_heat(mf, mc, mg, rf, rc, rg, cpf, cpc, cpg, g, height, St):
     cp = (mf * cpf) / mass_sum + \
          (mc * cpc) / mass_sum + \
          (mg * cpg) / mass_sum
+
+    mp = (mf * mpf) / mass_sum + \
+         (mc * mpc) / mass_sum + \
+         (mg * mpg) / mass_sum
+
     height /= 2
     velocity = math.sqrt(2 * g * height)
     hcoef = St * dense * velocity * cp
     area = vsum / height
-    return area * hcoef
+    #area = math.pi * r * r
+    ret =  4 * 17 * 17 * area * hcoef  * (selft - mp)
+    #print 'impingmeng hcoef %e heat %e' % (hcoef, ret)
+    return ret
 
 class Drop_mass(object):
     def __init__(self, f, c, g):
         self.fuel_mass = f
         self.clad_mass = c
         self.gray_mass = g
-    def drop_heat(self):
+    def drop_heat(self, imping_temp):
         return _calc_drop_heat(self.fuel_mass, self.clad_mass, self.gray_mass,
                               Const.dict['fuel_dense'], Const.dict['clad_dense'], Const.dict['gray_dense'],
                               Const.dict['fule_cp'], Const.dict['clad_cp'], Const.dict['gray_cp'],
-                              Const.dict['gravity'], Const.dict['core_height'], Const.dict['reference_ST_number'])
+                              Const.dict['fule_mp'], Const.dict['clad_mp'], Const.dict['gray_mp'],
+                              Const.dict['gravity'], Const.dict['core_height'], Const.dict['rod_radious'], 
+                              Const.dict['reference_ST_number'], imping_temp)
     def mass_sum(self):
         return self.fuel_mass + self.clad_mass + self.gray_mass
     def toString(self):
@@ -51,7 +64,7 @@ def parse_input_file(filename, restart_step):
     t = 0
     for line in f:
         if line_counter % 53 == 0:
-            if t  >= restart_step:
+            if t  >= restart_step and line_counter != 0:
                 yield t, ret
             t = float(line)
             ret = {}
@@ -135,40 +148,46 @@ def calc_drop_volumn(drop_list):
         drop_vol += item.gray_mass / gray_dense
     return drop_vol
 
-def calc_core_flux(bottom_t, board_t):
+def calc_core_flux(bottom_t, board_t, h):
     #distance = Const.dict['bottom_board_distance']
     sigma = Const.dict['bottom_sigma']
     epsi = Const.dict['bottom_epsi']
     r = Const.dict['board_radious']
     area = math.pi * r * r
-    qrad = area * sigma * epsi * (board_t ** 4 - bottom_t ** 4 )
-    qcov = 0.0
+    epsi = Const.dict['core_epsi']
+    qrad = sigma * epsi * (board_t ** 4 - bottom_t ** 4 ) / (1 / epsi + 1 / epsi - 1 )
+    qcov = h * (board_t - bottom_t)
     return  qrad + qcov
 
-def calc_drop_heat(drop_list, assembly_id):
+#TODO OPTIMIZE!
+def calc_drop_heat(drop_list, assembly_id, drop_point_temp):
     #assert isinstance(drop_list, dict)
     #assert isinstance(assembly_id, dict)
-    drop_heat_for_each_assembly = [(iass, item.drop_heat()) for (iass, item) in drop_list.items() ] 
+    drop_heat_for_each_assembly = [(iass, item.drop_heat(temp)) for ((iass, item), (iass2, temp)) in zip( drop_list.items(), drop_point_temp.items())] 
     sum_heat = 0
     for (iass, heat) in drop_heat_for_each_assembly:
         sum_heat += heat
     sum_mass = sum([item.mass_sum() for (iass, item) in drop_list.items() ])
     print_with_style('[drop]', mode = 'bold', fore = 'purple')
-    log( 'drop heat %e mass %e' % (sum_heat, sum_mass) )
-    rod_idx = []
-    drop_heat_for_rod = []
+    rod_imping_heat = {}
+    for iass, idxs in assembly_id.items():
+        for idx in idxs:
+            rod_imping_heat[idx] = 0
     for (iass, assemblyHeat) in drop_heat_for_each_assembly:
-        drop_heat_for_rod += ([ assemblyHeat/len(assembly_id[iass]) ] * len(assembly_id[iass]) )
-        rod_idx += assembly_id[iass]
-    return rod_idx, drop_heat_for_rod
+        for idx in assembly_id[iass]:
+            rod_imping_heat[idx] += assemblyHeat / len(assembly_id[iass])
+    for k, v in rod_imping_heat.items():
+        if abs(v) < 1.e-8:
+            del rod_imping_heat[k]
+    log( 'drop heat %e mass %e per_posi %e' % (sum_heat, sum_mass, sum_heat / len(rod_imping_heat)) )
+    if abs(sum_heat) < 1.e-5:
+        return None, None
+    else:
+        #print rod_imping_heat.values()
+        return rod_imping_heat.keys(), np.array(rod_imping_heat.values())
 
-def calc_pool_heat(drop_list):
-    r = Const.dict['board_radious']
-    sum = 0
-    for item in drop_list.values():
-        sum += item.drop_heat()
-    sum /= (math.pi * r *r)
-    return sum
+def calc_pool_heat(drop_list, pool_area):
+    return 0.0
 
 def calc_hole_volumn():
     r = Const.dict['rod_radious']
@@ -193,6 +212,7 @@ def save(status, temp_array):
     _f = open(title,'wb')
     #data = struct.pack('i',step)
     pickle.dump(status, _f)
+    pickle.dump(list( status['melted_set_tree'].items() ), _f)
     np.save(_f, temp_array)
 
 def load(temp_array):
@@ -207,7 +227,12 @@ def load(temp_array):
         try: 
             _f = open('sav/'+filename)
             status = pickle.load(_f)
+            tree = RBTree()
+            for k,v in pickle.load(_f):
+                tree[k] = v
+            status['melted_set_tree'] = tree
             temp_array[:]  = np.load(_f)[:] 
+            print status
             return status
         except IOError:
             print 'cannot open file %s... abort' % filename 
