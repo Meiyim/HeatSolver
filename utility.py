@@ -49,8 +49,8 @@ class Drop_mass(object):
     def drop_heat(self, imping_temp):
         return _calc_drop_heat(self.fuel_mass, self.clad_mass, self.gray_mass,
                               Const.dict['fuel_dense'], Const.dict['clad_dense'], Const.dict['gray_dense'],
-                              Const.dict['fule_cp'], Const.dict['clad_cp'], Const.dict['gray_cp'],
-                              Const.dict['fule_mp'], Const.dict['clad_mp'], Const.dict['gray_mp'],
+                              Const.dict['fuel_cp'], Const.dict['clad_cp'], Const.dict['gray_cp'],
+                              Const.dict['fuel_mp'], Const.dict['clad_mp'], Const.dict['gray_mp'],
                               Const.dict['gravity'], Const.dict['core_height'], Const.dict['rod_radious'], 
                               Const.dict['reference_ST_number'], imping_temp)
     def mass_oxide(self):
@@ -61,11 +61,14 @@ class Drop_mass(object):
         return self.fuel_mass + self.clad_mass + self.gray_mass
     def mp(self):
         m = self.mass_sum()
-        return Const.dict['fuel_mp'] * self.fuel_mass / m +\
+        if m < 1.e-8 :
+            return 0
+        else:
+            return Const.dict['fuel_mp'] * self.fuel_mass / m +\
                Const.dict['clad_mp'] * self.clad_mass / m +\
                Const.dict['gray_mp'] * self.gray_mass / m
     def toString(self):
-        return '[fule] %e [clad] % e [gray] %e' % (self.fuel_mass, self.clad_mass, self.gray_mass)
+        return '[fuel] %e [clad] % e [gray] %e' % (self.fuel_mass, self.clad_mass, self.gray_mass)
  
 def parse_input_file(filename, restart_step):
     f = open(filename, 'r')
@@ -132,7 +135,7 @@ def calcMoltenMetalFlux(Ra, Pr, lamda, L):
 @jit(float64(float64, float64, float64), nopython=True)
 def calcMoltenOxideFlux(Ra_p, lamda, L):
     if not 1e12 < Ra_p < 2e16:
-        print 'Ra_p didnt confont correlation'
+        print 'Ra_p didnt confont correlation', Ra_p
     Nu = 0.1857 * Ra_p ** 0.2304
     return Nu * lamda / L
  
@@ -224,11 +227,12 @@ def calc_pool_heat(drop_list, T_up, surface_idx, pool_volumn, pool_area, power_d
     Q = power_distribution.sum()
     Q /= pool_volumn
     H = pool_volumn / pool_area
-    print 'pool Height %f' % H
+    H /= 2
     Ra_p = calcRa_p(T_up - T_corium, H, 
-                    Const.dict['oxide_beta'], Const.dict['liquid_oxide_niu'], Const.dict['liquid_oxide_rou'], 
+                    Const.dict['liquid_oxide_beta'], Const.dict['liquid_oxide_niu'], Const.dict['liquid_oxide_rou'], 
                     Const.dict['liquid_oxide_Pr'], Q, Const.dict['liquid_oxide_lambda'])
     h = calcMoltenOxideFlux(Ra_p, Const.dict['liquid_oxide_lambda'], H)
+    #print 'pool Height %f heat %f' % (H, h)
     return h
 
 def calc_hole_volumn():

@@ -133,7 +133,7 @@ def main():
 
         status['board'] = 1 if status['pool_volumn'] < status['melted_volumn'] else 2
 
-        pool_bottom_surface_idx = mesh.get_pool_bottom(status)
+        pool_bottom_surface_idx, pool_area = mesh.get_pool_bottom(status)
         #from core
         flux_from_core = uti.calc_core_flux(bottom_t, T_up_mean, h_steam)
         uti.log('core flux: %10e' % flux_from_core)
@@ -141,7 +141,6 @@ def main():
         #from pool
         if len(pool_bottom_surface_idx) != 0:
             uti.log('pooling')
-            pool_area = sum(iter.imap(lambda idx:  mesh.get_neighbour_area(idx)[4], pool_bottom_surface_idx))
             flux_from_pool = uti.calc_pool_heat(drop_list, T_up_mean, pool_bottom_surface_idx, status['pool_volumn'], pool_area, now_power_distribution)
             uti.log('pool flux %10e' % flux_from_pool )
             solver.set_upper_flux(b_, pool_bottom_surface_idx, flux_from_pool)  
