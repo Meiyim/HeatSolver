@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import itertools as iter
 import itertools
 import utility as uti
 from numba import jit
@@ -72,6 +73,7 @@ class StructuredMesh3D(Mesh):
         return self.get_position3d(cord)
     def get_position3d(self, cord):
         pass
+
     def get_index(self, cord): #None able
         x, y, z = cord
         if 0 <= x < self._nx and 0<= y < self._ny and 0 <= z < self._nz :
@@ -132,11 +134,12 @@ class CylinderlMesh(StructuredMesh3D):
         dz = z / float(iz)
         dz /= 2
         uti.log('begin %f end %f ratio %e' % (dr, r-dr, qr) )
-        super(CylinderlMesh, self).__init__(ir, it, iz, dr, r-dr, 0., 2 * math.pi, dz, z - dz)
+        super(CylinderlMesh, self).__init__(ir, it, iz, dr, r-dr, 0., 0.5 * math.pi, dz, z - dz)
         self._cordinatex = uti.stupid_method(dr, r-dr, qr, ir)
         self._cordinatex = np.hstack((self._cordinatex, np.array((r+dr, -dr))))
         self._cordinatez = np.hstack((self._cordinatez, np.array((z+dz, -dz))))
         uti.log('CHECK CORDINATE R: %s' % str(self._cordinatex))
+        print self._cordinatey
         upper_bound = set(
             [self.get_index(cord)  for cord in itertools.product(xrange(0, ir), xrange(0, it), xrange(iz - 1, iz)) ]
         )
@@ -165,16 +168,17 @@ class CylinderlMesh(StructuredMesh3D):
             )
     def get_bottom_index_at_position(self, pos): #optimizeable
         x, y = pos
+        epsi = 1.e-9
         r = math.sqrt(x**2 + y**2)
-        theta = math.atan(y / (x + 1.e-9))
-        theta = theta if x > 0. else theta + math.pi
-        dt = int( (theta - self._cordinatey[0] / self._ny) ) 
+        theta = math.atan(y / (x + epsi))
+        assert -epsi  < theta < 0.5 * math.pi + epsi
+        dt = int((theta - self._cordinatey[0]) / (self._cordinatey[1] - self._cordinatey[0])) 
         dr = 0
         for the_r in self._cordinatex:
             dr += 1
             if the_r > r:
                 break
-        return self.get_index((dr, dt, self._nz - 1))
+        return (dr, dt)
  
     def d_cordinate(self, cord):
         i, j, k = cord
@@ -227,11 +231,13 @@ class CylinderlMesh(StructuredMesh3D):
                 idx = self.down_step(idx)#step
             return idx
         self._upper_boundary = set([_find_upper(idx) for idx in self._upper_boundary ])
-        if None in self._upper_boundary:
-            self._upper_boundary.remove(None)
+        if None in self._upper_boundary: self._upper_boundary.remove(None)
         return self._upper_boundary
 
-    def get_pool_bottom(self, melted_set, melted_set_tree, pool_volumn):
+    def get_pool_bottom(self, status):
+        melted_set = status['melted_set'] 
+        melted_set_tree = status['melted_set_tree']
+        pool_volumn = status['pool_volumn']
         # insert
         cord_idx_pair = [ (self.get_3d_index(idx), idx) for idx in melted_set ]
         #make h first
@@ -239,24 +245,52 @@ class CylinderlMesh(StructuredMesh3D):
         for (cord, idx) in cord_idx_pair:
             melted_set_tree[cord] = idx
         vol = 0
-        ret = set()
+        pool_idxs  = set()
         for cord, idx in melted_set_tree.items():
             vol += self.get_volumn(idx)
             if vol > pool_volumn:
                 break
             else:
-                ret.add(idx)
-        ret = set([ self.down_step(idx) for idx in ret]) & self._upper_boundary
+                pool_idxs.add(idx)
+        ret = set([ self.down_step(idx) for idx in pool_idxs]) & self._upper_boundary
         if len(ret) == 0:
             return ret, 0
         else:
-            return ret, sum([self.get_neighbour_area(idx)[4] for idx in ret])
-
+            melted_set_sum = status['melted_set_sum']
+            #pool_area = sum([self.get_neighbour_area(idx)[4] for idx in ret])
+            iter_idx = iter.imap(lambda idx : self.get_neighbour(idx), pool_idxs)
+            iter_area = iter.imap(lambda idx : self.get_neighbour_area(idx), pool_idxs)
+            iter2 = iter.imap(lambda idxs: (idxs[2], idxs[3], idxs[4], idxs[5]), zip(iter_idx, iter_area))
+            for i1, i2, i3, i4 in iter2:
+                if i1 in ret or i2 in ret or i3 in ret or i4 in ret:
+                    continue
+                if i1 is not None and i1 not in melted_set_sum:
+                    ret.add(i1)
+                if i2 is not None and i2 not in melted_set_sum:
+                    ret.add(i2)
+                if i3 is not None and i3 not in melted_set_sum:
+                    ret.add(i3)
+                if i4 is not None and i4 not in melted_set_sum:
+                    ret.add(i4)
+            return ret
 
     def calc_melted_volumn(self, melted_set):
         return sum(map(lambda idx: self.get_volumn(idx), melted_set))
 
-    def tecplot_str(self, var, status):
+    def get_drop_point_idx(self, xy_idx):
+        upper_surface_idx = self._upper_boundary
+        xyz_upper = iter.imap(lambda idx: self.get_3d_index(idx), upper_surface_idx)
+        xy_dict = dict([ ((x, y), z) for (x, y, z) in xyz_upper])
+        assert len(xy_dict) == len(upper_surface_idx)
+        ret = {}
+        for iass, idxs in xy_idx.items():
+            arr = []
+            for (x,y) in idxs:
+                if (x, y) in xy_dict: arr.append(self.get_index((x, y, xy_dict[x, y])))
+            ret[iass] = arr
+        return ret
+
+    def tecplot_str(self, var, status, boundary_idx):
         tec_text = []
         tec_text.append('title = supporting board')
         tec_text.append('ZONE I=%d, J=%d, K=%d, F=point' % (self._nz, self._ny, self._nx + 1))
@@ -271,7 +305,11 @@ class CylinderlMesh(StructuredMesh3D):
             for j in xrange(0, self._ny):
                 for k in xrange(0, self._nz):
                     idx = self.get_index((i, j, k))
-                    stat = 1 if idx in status['melted_set_sum'] else 0
+                    stat = 0 
+                    if idx in boundary_idx:
+                        stat = 1
+                    elif idx in status['melted_set_sum']:
+                        stat = 2
                     tec_text.append('%e %e %e %e %d' % (self.get_position3d((i, j, k)) + (var[idx], stat)))
         return '\n'.join(tec_text)
 

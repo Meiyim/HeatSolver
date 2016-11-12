@@ -2,6 +2,7 @@ import numpy as np
 import sys
 import math
 import time
+import itertools as iter
 import petsc4py
 petsc4py.init(sys.argv)
 
@@ -55,7 +56,6 @@ def main():
     assembly_id = {}
     for x, y, iass in Const.assembly_pos:
         idx = mesh.get_bottom_index_at_position((x, y))
-        assert mesh.get_3d_index(idx)[2] == Const.dict['nz'] - 1
         assert idx is not None
         if assembly_id.get(iass) is None:
             assembly_id[iass] = [idx]
@@ -94,7 +94,7 @@ def main():
     core_status = uti.core_status_generator(0.0, 1.0, status['time_step'])
     if rst_stat is not None:
         status = rst_stat
-    for t, drop_list in uti.parse_input_file('melt_history_short3', status['time_step']):
+    for t, drop_list in uti.parse_input_file('melt_history_3.short', status['time_step']):
         now_water, bottom_t, now_power_distribution = core_status.next()
         status['time_step']  = t
         now = time.time()
@@ -106,7 +106,7 @@ def main():
         T = solver.get_T()
         #temporal_term
         A_, b_ = solver.duplicate_template()
-        solver.add_teporal_term(A_, b_, 1.0 if t > 600 else 1000.0)
+        solver.add_teporal_term(A_, b_, 1.0 if t > 560 else 999.0)
         #down_side
         T_down_mean = np.array([ T[idx] for idx in  down_id]).mean()
         h_steam = uti.calc_hcoef(T_down_mean, corelation_length, T_steam)
@@ -122,20 +122,31 @@ def main():
         uti.log('down temp %e up temp %e' % (T_down_mean, T_up_mean))
 
         #from impingment
-        drop_point_temp = solver.get_drop_point_temp(assembly_id)
-        rod_idx, drop_heat_for_rod = uti.calc_drop_heat(drop_list, assembly_id, drop_point_temp)
+        drop_point_idx = mesh.get_drop_point_idx(assembly_id)
+        drop_point_temp = solver.get_drop_point_temp(drop_point_idx)
+        rod_idx, drop_heat_for_rod = uti.calc_drop_heat(drop_list, drop_point_idx, drop_point_temp)
         if drop_heat_for_rod is not None:
             uti.log('impinging')
+            #print rod_idx
+            assert len(set(rod_idx) & status['melted_set_sum']) == 0
             solver.set_heat_point(b_, rod_idx, drop_heat_for_rod)
 
         status['board'] = 1 if status['pool_volumn'] < status['melted_volumn'] else 2
 
-        pool_bottom_surface_idx, pool_area = mesh.get_pool_bottom(status['melted_set'], status['melted_set_tree'], status['pool_volumn'])
+        pool_bottom_surface_idx = mesh.get_pool_bottom(status)
         #from core
         flux_from_core = uti.calc_core_flux(bottom_t, T_up_mean, h_steam)
         uti.log('core flux: %10e' % flux_from_core)
         solver.set_upper_flux(b_, list(upper_surface_idx - pool_bottom_surface_idx), flux_from_core)
-
+        #from pool
+        if len(pool_bottom_surface_idx) != 0:
+            uti.log('pooling')
+            pool_area = sum(iter.imap(lambda idx:  mesh.get_neighbour_area(idx)[4], pool_bottom_surface_idx))
+            flux_from_pool = uti.calc_pool_heat(drop_list, T_up_mean, pool_bottom_surface_idx, status['pool_volumn'], pool_area, now_power_distribution)
+            uti.log('pool flux %10e' % flux_from_pool )
+            solver.set_upper_flux(b_, pool_bottom_surface_idx, flux_from_pool)  
+            # other boundary goes here
+            # solve
         #debug
         '''
         for idx in upper_surface_idx:
@@ -148,22 +159,12 @@ def main():
                 raw_input()
         raw_input()
         '''
-
-
-
-        #from pool
-        if pool_area != 0:
-            flux_from_pool = uti.calc_pool_heat(drop_list, pool_area)
-            uti.log('pool flux %10e' % flux_from_pool )
-            solver.set_upper_flux(b_, pool_bottom_surface_idx, flux_from_pool)  
-            # other boundary goes here
-            # solve
         T = solver.solve(1.e-6, 100)
         summary(t, T, status)
         #post
         if t  % Const.dict['output_step'] == 0:
             uti.print_with_style('[tecploting...]', mode = 'bold', fore = 'blue')
-            str_buffer = mesh.tecplot_str(T, status)
+            str_buffer = mesh.tecplot_str(T, status, pool_bottom_surface_idx)
             open('tec/tec_%d.dat' % t, 'w').write(str_buffer)
         if t  % Const.dict['restart_step'] == 0:
             uti.save(status, T)

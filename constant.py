@@ -21,20 +21,30 @@ dict = {
     'T_init': 373,
     'T_steam': 500,
     'Pr_steam': 1.003, 
+    'lambda_steam': 0.025, # W/(m * K)
+    'beta_steam':0.00268,
+    'niu_steam':12.37e-6,
+    'rou_steam':1.673,
     'Pr_wall': 1.1, # imaginary
     'gravity': 9.8, # m / s ^ 2
     #material
-    'lambda_steam': 0.025, # W/(m * K)
     'fuel_dense': 8740.0, # kg / (m^3)
     'clad_dense': 5990.0, # kg / (m^3)
     'gray_dense': 7020.0, # kg / (m^3)
     'fule_cp': 535.0,# J/(kg * K)
     'clad_cp': 645.0,# J/(kg * K)
     'gray_cp': 835.0,# J/(kg * K)
-    'fule_mp': 2911.0,# K
-    'clad_mp': 3113.0,# K
+    'fule_mp': 3113.0,# K
+    'clad_mp': 2960.0,# K
     'gray_mp': 1600.0,# K
     'core_epsi': 0.8, # 
+    #Molten liquid
+    'liquid_oxide_beta': 1.05e-3,
+    'liquid_oxide_rou:': 8866, # kg / (m^3)
+    'liquid_oxide_niu': 0.494e-6, # m^2/s
+    # a = 4.2e-7
+    'liquid_oxide_Pr': 1.176, # niu / a
+    'liquid_oxide_lambda':2.5, # W / (m * K)
     # output control
     'output_step': 50, 
     'restart_step': 100,

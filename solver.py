@@ -76,10 +76,14 @@ class PetscSolver(Solver):
     def set_heat_point(self, b, idx_array, heat_array):
         assert len(idx_array) == len(heat_array)
         b.setValues(idx_array, 0. - np.array(heat_array), addv = True)
+        b.assemblyBegin()
+        b.assemblyEnd()
     def set_upper_flux(self, b, idx_array, flux):
         areas = [self._mesh.get_neighbour_area(idx)[4] for idx in idx_array]
         flux = flux * np.array(areas)
-        b.setValues(idx_array, 0. - flux, addv = True)
+        b.setValues(list(idx_array), 0. - flux, addv = True)
+        b.assemblyBegin()
+        b.assemblyEnd()
     def build_laplas_matrix(self, A):
         uti.log('building laplas template...')
         for row in xrange(0, self._mesh.get_ncell()):

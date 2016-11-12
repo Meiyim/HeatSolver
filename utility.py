@@ -4,6 +4,7 @@ import os
 import math
 import pickle
 import constant as Const
+import itertools as iter
 from bintrees import RBTree
 from numba import jit
 from numba import float64, int64
@@ -34,9 +35,9 @@ def _calc_drop_heat(mf, mc, mg, rf, rc, rg, cpf, cpc, cpg, mpf, mpc, mpg, g, hei
     height /= 2
     velocity = math.sqrt(2 * g * height)
     hcoef = St * dense * velocity * cp
-    area = vsum / height
+    area = vsum / 0.079
     #area = math.pi * r * r
-    ret =  4 * 17 * 17 * area * hcoef  * (selft - mp)
+    ret = 4 * area * hcoef  * (selft - mp)
     #print 'impingmeng hcoef %e heat %e' % (hcoef, ret)
     return ret
 
@@ -52,8 +53,17 @@ class Drop_mass(object):
                               Const.dict['fule_mp'], Const.dict['clad_mp'], Const.dict['gray_mp'],
                               Const.dict['gravity'], Const.dict['core_height'], Const.dict['rod_radious'], 
                               Const.dict['reference_ST_number'], imping_temp)
+    def mass_oxide(self):
+        return self.fuel_mass
+    def mass_metal(self):
+        return self.gray_mass + self.clad_mass
     def mass_sum(self):
         return self.fuel_mass + self.clad_mass + self.gray_mass
+    def mp(self):
+        m = self.mass_sum()
+        return Const.dict['fuel_mp'] * self.fuel_mass / m +\
+               Const.dict['clad_mp'] * self.clad_mass / m +\
+               Const.dict['gray_mp'] * self.gray_mass / m
     def toString(self):
         return '[fule] %e [clad] % e [gray] %e' % (self.fuel_mass, self.clad_mass, self.gray_mass)
  
@@ -92,17 +102,39 @@ def core_status_generator(t_start, t_step, restart_time):
             yield  now_water, bottom_temp,  now_power_distribution
         t += t_step
 
-@jit(float64(float64, float64), nopython=True)
-def calSteamGr(dT,L):
+@jit(float64(float64, float64, float64, float64, float64), nopython=True)
+def calcGr(dT, L, beta, niu, rou):
     dT = abs(dT)
-    beta = 0.00268
     g = 9.8
-    niu = 12.37e-6
-    rou = 0.598
     if dT < 1.e-10 or L < 1.e-10:
         print ('Gr is zero or negative')
     return g*beta*dT*(L**3) /((niu/rou)**2) 
 
+@jit(float64(float64, float64, float64, float64, float64, float64), nopython=True)
+def calcRa(dT, L, beta, niu, rou, Pr):
+    Gr = calcGr(dT, L, beta, niu, rou)
+    return Gr * Pr
+
+@jit(float64(float64, float64, float64, float64, float64, float64, float64, float64), nopython=True)
+def calcRa_p(dT, L, beta, niu, rou, Pr, Q, lamda):
+    g = 9.8
+    return Pr * (g * beta * Q * L ** 5) / (lamda * niu ** 2)
+
+@jit(float64(float64, float64, float64, float64), nopython=True)
+def calcMoltenMetalFlux(Ra, Pr, lamda, L):
+    if not 0.02 < Pr < 8750:
+        print 'Pr didnt confont correlation'
+    if not 3e5 < Ra < 7e9:
+        print 'Ra didnt confont correlation'
+    Nu = 0.069 * Ra ** (1/3) * Pr ** (0.074)
+    return Nu * lamda / L
+
+@jit(float64(float64, float64, float64), nopython=True)
+def calcMoltenOxideFlux(Ra_p, lamda, L):
+    if not 1e12 < Ra_p < 2e16:
+        print 'Ra_p didnt confont correlation'
+    Nu = 0.1857 * Ra_p ** 0.2304
+    return Nu * lamda / L
  
 @jit(float64(float64, float64, float64, float64), nopython=True)
 def calcSteamHeatTransferRateCore(Gr, Prf, L, lamda):
@@ -126,15 +158,12 @@ def calcSteamHeatTransferRateCore2(Gr, Prf, Prw, L, lamda):
         Nu = 0.15 * (mul)**0.333 * (Prf/Prw) ** (0.25)
     return   Nu * lamda / L
 
-def calcSteamHeatTransferRate(Gr, Prf, Prw, L): 
-    return calcSteamHeatTransferRateCore2(Gr, Prf, Prw, L, Const.dict['lambda_steam'])
  
 def calc_hcoef(T, L, Tf):
-    Gr = calSteamGr(T - Tf, L)
+    Gr = calcGr(T - Tf, L, Const.dict['beta_steam'], Const.dict['niu_steam'], Const.dict['rou_steam'])
     Pr_fluid = Const.dict['Pr_steam']
     Pr_wall = Const.dict['Pr_wall']
-    h = calcSteamHeatTransferRate(Gr, Pr_fluid, Pr_wall, L)
-    return h
+    return calcSteamHeatTransferRateCore2(Gr, Pr_fluid, Pr_wall, L, Const.dict['lambda_steam'])
 
 def calc_drop_volumn(drop_list):
     fuel_dense = Const.dict['fuel_dense']
@@ -153,7 +182,7 @@ def calc_core_flux(bottom_t, board_t, h):
     sigma = Const.dict['bottom_sigma']
     epsi = Const.dict['bottom_epsi']
     r = Const.dict['board_radious']
-    area = math.pi * r * r
+    area = math.pi * r * r / 4
     epsi = Const.dict['core_epsi']
     qrad = sigma * epsi * (board_t ** 4 - bottom_t ** 4 ) / (1 / epsi + 1 / epsi - 1 )
     qcov = h * (board_t - bottom_t)
@@ -179,15 +208,28 @@ def calc_drop_heat(drop_list, assembly_id, drop_point_temp):
     for k, v in rod_imping_heat.items():
         if abs(v) < 1.e-8:
             del rod_imping_heat[k]
-    log( 'drop heat %e mass %e per_posi %e' % (sum_heat, sum_mass, sum_heat / len(rod_imping_heat)) )
     if abs(sum_heat) < 1.e-5:
         return None, None
     else:
+        log( 'drop heat %e mass %e per_posi %e' % (sum_heat, sum_mass, sum_heat / len(rod_imping_heat)) )
         #print rod_imping_heat.values()
         return rod_imping_heat.keys(), np.array(rod_imping_heat.values())
 
-def calc_pool_heat(drop_list, pool_area):
-    return 0.0
+def calc_pool_heat(drop_list, T_up, surface_idx, pool_volumn, pool_area, power_distribution):
+    iter_mass = iter.imap(lambda item: (item.mass_oxide(), item.mass_metal()), drop_list.values())
+    mass_oxide, mass_metal = reduce(lambda (a, b), (c, d): (a+c, b+d), iter_mass)
+    mass_sum = mass_oxide + mass_metal
+    T_corium = sum(iter.imap(lambda item: item.mp(), drop_list.values()))
+
+    Q = power_distribution.sum()
+    Q /= pool_volumn
+    H = pool_volumn / pool_area
+    print 'pool Height %f' % H
+    Ra_p = calcRa_p(T_up - T_corium, H, 
+                    Const.dict['oxide_beta'], Const.dict['liquid_oxide_niu'], Const.dict['liquid_oxide_rou'], 
+                    Const.dict['liquid_oxide_Pr'], Q, Const.dict['liquid_oxide_lambda'])
+    h = calcMoltenOxideFlux(Ra_p, Const.dict['liquid_oxide_lambda'], H)
+    return h
 
 def calc_hole_volumn():
     r = Const.dict['rod_radious']
@@ -298,5 +340,18 @@ def log(str):
     logfile.write(text)
     sys.stdout.write(text)
 
-    
+cacher = {}
+def function_cacher(func):
+    def wrapper(*args, **kw):
+        if func.__name__ not in cacher:
+            cacher[func.__name__] = {}
+        cache_dict = cacher[func.__name__]
+        if args not in cache_dict:
+            ret = func(*args, **kw)
+            cache_dict[args] = ret
+            return ret
+        else: 
+            return cache_dict[args]
+    return wrapper
+        
  
