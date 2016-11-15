@@ -3,6 +3,7 @@ import numpy as np
 import itertools as iter
 import itertools
 import utility as uti
+import constant as Const
 from numba import jit
 from numba import int64, float64
 
@@ -239,11 +240,13 @@ class CylinderlMesh(StructuredMesh3D):
         melted_set_tree = status['melted_set_tree']
         pool_volumn = status['pool_volumn']
         # insert
-        cord_idx_pair = [ (self.get_3d_index(idx), idx) for idx in melted_set ]
+        iter_cord = iter.imap(lambda idx : (self.get_3d_index(idx), idx), melted_set)
         #make h first
-        cord_idx_pair = [ ((z, y, x), idx) for ((x, y ,z), idx) in cord_idx_pair]
+        cord_idx_pair = [ ((z, y, x), idx) for ((x, y ,z), idx) in iter_cord]
         for (cord, idx) in cord_idx_pair:
             melted_set_tree[cord] = idx
+
+        if len(melted_set_tree) == 0 : return set(), 0
         vol = 0
         pool_idxs  = set()
         for cord, idx in melted_set_tree.items():
@@ -252,6 +255,9 @@ class CylinderlMesh(StructuredMesh3D):
                 break
             else:
                 pool_idxs.add(idx)
+        penetrate_iz = melted_set_tree.keys().next()[0]
+        print 'penetrate deep %e idx %d' % (self._cordinatez[penetrate_iz], penetrate_iz)
+
         ret = set([ self.down_step(idx) for idx in pool_idxs]) & self._upper_boundary
         if len(ret) == 0:
             return ret, 0

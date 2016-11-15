@@ -83,7 +83,7 @@ def main():
     uti.log('prepare solving')
 
     solver = Solver.PetscSolver(mesh)
-    solver.allocate(Const.dict['T_init'])
+    solver.allocate(Const.dict['T_initmin'], Const.dict['T_initmax'])
     solver.prepare_context()
 
     A, b = solver.get_template()
@@ -106,7 +106,7 @@ def main():
         T = solver.get_T()
         #temporal_term
         A_, b_ = solver.duplicate_template()
-        solver.add_teporal_term(A_, b_, 1.0 if t > 560 else 999.0)
+        solver.add_teporal_term(A_, b_, 1.0 if t > 561 else 400.0)
         #down_side
         T_down_mean = np.array([ T[idx] for idx in  down_id]).mean()
         h_steam = uti.calc_hcoef(T_down_mean, corelation_length, T_steam)
@@ -141,12 +141,13 @@ def main():
         #from pool
         if len(pool_bottom_surface_idx) != 0:
             uti.log('pooling')
+            pool_area = math.pi * Const.dict['board_thick'] ** 2 / 4
             flux_from_pool = uti.calc_pool_heat(drop_list, T_up_mean, pool_bottom_surface_idx, status['pool_volumn'], pool_area, now_power_distribution)
             uti.log('pool flux %10e' % flux_from_pool )
             solver.set_upper_flux(b_, pool_bottom_surface_idx, flux_from_pool)  
-            # other boundary goes here
-            # solve
-        #debug
+        # other boundary goes here
+        # solve
+        # debug
         '''
         for idx in upper_surface_idx:
             assert mesh.get_3d_index(idx)[2] == Const.dict['nz'] - 1

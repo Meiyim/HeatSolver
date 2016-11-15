@@ -7,7 +7,7 @@ dict = {
     'global_lamda':25.0, # W /(m * K)
     'global_melt_point':1600.0, #K 
     'board_radious': 3.63 / 2, #m
-    'board_thick': 0.415, #m
+    'board_thick': 0.415, #m #500?
     'bottom_board_distance':0.079, #m
     'bottom_sigma':5.67e-8, #W/(m^2 * K^4)
     'bottom_epsi': 0.8, 
@@ -16,9 +16,10 @@ dict = {
     'core_height': 3.657, #m
     'nr': 270, #
     'nt': 72, #
-    'nz': 30, #
+    'nz': 100, #
     'radious_increase_ratio': 0.995,
-    'T_init': 373,
+    'T_initmin': 510,
+    'T_initmax': 1490,
     'T_steam': 500,
     'Pr_steam': 1.003, 
     'lambda_steam': 0.025, # W/(m * K)

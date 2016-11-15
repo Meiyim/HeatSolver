@@ -136,6 +136,7 @@ def calcMoltenMetalFlux(Ra, Pr, lamda, L):
 def calcMoltenOxideFlux(Ra_p, lamda, L):
     if not 1e12 < Ra_p < 2e16:
         print 'Ra_p didnt confont correlation', Ra_p
+        return 0.0
     Nu = 0.1857 * Ra_p ** 0.2304
     return Nu * lamda / L
  
@@ -228,12 +229,12 @@ def calc_pool_heat(drop_list, T_up, surface_idx, pool_volumn, pool_area, power_d
     Q /= pool_volumn
     H = pool_volumn / pool_area
     H /= 2
-    Ra_p = calcRa_p(T_up - T_corium, H, 
+    Ra_p = calcRa_p(70, H, #T_up - T_corium, H, 
                     Const.dict['liquid_oxide_beta'], Const.dict['liquid_oxide_niu'], Const.dict['liquid_oxide_rou'], 
                     Const.dict['liquid_oxide_Pr'], Q, Const.dict['liquid_oxide_lambda'])
     h = calcMoltenOxideFlux(Ra_p, Const.dict['liquid_oxide_lambda'], H)
-    #print 'pool Height %f heat %f' % (H, h)
-    return h
+    print 'pool Height %f heat %f area %f' % (H, h, pool_area)
+    return h * 70#(T_up - T_corium)
 
 def calc_hole_volumn():
     r = Const.dict['rod_radious']

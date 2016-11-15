@@ -1,6 +1,7 @@
 import numpy as np
 import mesh as Mesh
 import utility as uti
+import constant as Const
 from numba import jit
 from petsc4py import PETSc
 
@@ -34,14 +35,22 @@ class PetscSolver(Solver):
         self._coefMatrix = self._coefMatrixTemplate.duplicate(copy=True)
         self._rhs = self._rhsTemplate.duplicate()
         return self._coefMatrix, self._rhs
-    def allocate(self, Tinit):
+    def allocate(self, Tinitmin, Tinitmax):
         ncell = self._mesh.get_ncell()
         vec = PETSc.Vec().createSeq(ncell)
         self._rhsTemplate = vec.duplicate()
         self._xsol = vec.duplicate()
         self._coefMatrixTemplate = PETSc.Mat().createAIJ([ncell, ncell], nnz = 7)
         self._T = np.zeros((ncell))
-        self._T[:] = Tinit
+        nz = Const.dict['nz']
+        ny = Const.dict['nt']
+        nx = Const.dict['nr']
+        arr_temp = np.linspace(Tinitmin, Tinitmax, nz)
+        for i in xrange(0, nx):
+            for j in xrange(0, ny):
+                for k in xrange(0, nz):
+                    self._T[self._mesh.get_index((i, j, k))] = arr_temp[k]
+
     def prepare_context(self): # prepare CG with ILU Precondition
         self._ksp = PETSc.KSP().create()
         self._ksp.setType(PETSc.KSP.Type.CG)
@@ -135,6 +144,7 @@ class PetscSolver(Solver):
     def get_drop_point_temp(self, assembly_id):
         ret = {}
         for iass, idxs in assembly_id.items():
+            if len(idxs) == 0: continue # the assembly is penetrated
             ret[iass] = sum([self._T[idx] for idx in idxs ]) / len(idxs)
         return ret
     def solve(self, rtol, max_iter):
