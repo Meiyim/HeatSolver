@@ -141,7 +141,7 @@ def main():
         #from pool
         if len(pool_bottom_surface_idx) != 0:
             uti.log('pooling')
-            pool_area = math.pi * Const.dict['board_thick'] ** 2 / 4
+            #pool_area = math.pi * Const.dict['board_radious'] ** 2 / 4
             flux_from_pool = uti.calc_pool_heat(drop_list, T_up_mean, pool_bottom_surface_idx, status['pool_volumn'], pool_area, now_power_distribution)
             uti.log('pool flux %10e' % flux_from_pool )
             solver.set_upper_flux(b_, pool_bottom_surface_idx, flux_from_pool)  

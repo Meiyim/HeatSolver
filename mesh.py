@@ -252,13 +252,18 @@ class CylinderlMesh(StructuredMesh3D):
         for cord, idx in melted_set_tree.items():
             vol += self.get_volumn(idx)
             if vol > pool_volumn:
+                print 'pool not conver yet'
                 break
             else:
                 pool_idxs.add(idx)
         penetrate_iz = melted_set_tree.keys().next()[0]
         print 'penetrate deep %e idx %d' % (self._cordinatez[penetrate_iz], penetrate_iz)
 
-        ret = set([ self.down_step(idx) for idx in pool_idxs]) & self._upper_boundary
+        if vol <= pool_volumn:
+            ret = self._upper_boundary
+        else:
+            ret = set([ self.down_step(idx) for idx in pool_idxs]) & self._upper_boundary
+
         if len(ret) == 0:
             return ret, 0
         else:
