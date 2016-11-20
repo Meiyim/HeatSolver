@@ -239,7 +239,7 @@ class CylinderlMesh(StructuredMesh3D):
     def get_pool_bottom(self, status):
         melted_set = status['melted_set'] 
         melted_set_tree = status['melted_set_tree']
-        pool_volumn = status['pool_volumn']
+        pool_volumn = status['pool_volumn'] - uti.calc_hole_volumn()
         # insert
         iter_cord = iter.imap(lambda idx : (self.get_3d_index(idx), idx), melted_set)
         #make h first
@@ -266,7 +266,7 @@ class CylinderlMesh(StructuredMesh3D):
             lowest =  melted_set_tree.keys().next()
             penetrate_iz = lowest[0] - 1
             print 'penetrate-deep %e idx %d lowest-pool %s' % (self._cordinatez[penetrate_iz], penetrate_iz, str(lowest))
-            if vol <= pool_volumn:
+            if vol > pool_volumn:
                 print 'pool covering'
                 ret = deepcopy(self._upper_boundary)
             else:
@@ -278,6 +278,7 @@ class CylinderlMesh(StructuredMesh3D):
         iter_idx = iter.imap(lambda idx : self.get_neighbour(idx), pool_idxs)
         iter_area = iter.imap(lambda idx : self.get_neighbour_area(idx), pool_idxs)
         iter2 = iter.imap(lambda (idxs, area): ((idxs[0], area[0]), (idxs[1], area[1]), (idxs[2], area[2]), (idxs[3], area[3])), zip(iter_idx, iter_area))
+        '''
         for (i1, a1), (i2, a2), (i3, a3), (i4, a4) in iter2:
             if i1 in ret or i2 in ret or i3 in ret or i4 in ret:
                 continue
@@ -293,6 +294,20 @@ class CylinderlMesh(StructuredMesh3D):
             if i4 is not None and i4 not in melted_set_sum:
                 ret.add(i4)
                 pool_area += a4
+        '''
+        for i1, i2, i3, i4 in iter_idx:
+            if i1 in ret or i2 in ret or i3 in ret or i4 in ret:
+                continue
+            if i1 is not None and i1 not in melted_set_sum:
+                ret.add(i1)
+            if i2 is not None and i2 not in melted_set_sum:
+                ret.add(i2)
+            if i3 is not None and i3 not in melted_set_sum:
+                ret.add(i3)
+            if i4 is not None and i4 not in melted_set_sum:
+                ret.add(i4)
+        #pool_area /= 4
+
         return ret, pool_area
 
     def calc_melted_volumn(self, melted_set):

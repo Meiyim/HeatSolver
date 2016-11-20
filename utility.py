@@ -217,35 +217,35 @@ def calc_drop_heat(drop_list, assembly_id, drop_point_temp):
     #assert isinstance(drop_list, dict)
     #assert isinstance(assembly_id, dict)
     drop_heat_for_each_assembly = {}
-    for iass, temp in drop_point_temp:
+    for iass, temp in drop_point_temp.items():
         drop_heat_for_each_assembly[iass] = drop_list[iass].drop_heat(temp)
     sum_heat = 0
-    for (iass, heat) in drop_heat_for_each_assembly:
+    for (iass, heat) in drop_heat_for_each_assembly.items():
         sum_heat += heat
-    sum_mass = sum([item.mass_sum() for (iass, item) in drop_list.items() ])
-    print_with_style('[drop]', mode = 'bold', fore = 'purple')
-    rod_imping_heat = {}
-    for iass, idxs in assembly_id.items():
-        for idx in idxs:
-            rod_imping_heat[idx] = 0
-    for (iass, assemblyHeat) in drop_heat_for_each_assembly:
-        for idx in assembly_id[iass]:
-            rod_imping_heat[idx] += assemblyHeat / len(assembly_id[iass])
-    for k, v in rod_imping_heat.items():
-        if abs(v) < 1.e-8:
-            del rod_imping_heat[k]
     if abs(sum_heat) < 1.e-5:
         return list(), list()
     else:
+        sum_mass = sum([item.mass_sum() for (iass, item) in drop_list.items() ])
+        print_with_style('[drop]', mode = 'bold', fore = 'purple')
+        rod_imping_heat = {}
+        for iass, idxs in assembly_id.items():
+            for idx in idxs:
+                rod_imping_heat[idx] = 0
+        for iass, assemblyHeat in drop_heat_for_each_assembly.items():
+            for idx in assembly_id[iass]:
+                rod_imping_heat[idx] += assemblyHeat / len(assembly_id[iass])
+        for k, v in rod_imping_heat.items():
+            if abs(v) < 1.e-8:
+                del rod_imping_heat[k]
         log('drop heat %e mass %e per_posi %e' % (sum_heat, sum_mass, sum_heat / len(rod_imping_heat)) )
         #print rod_imping_heat.values()
         return rod_imping_heat.keys(), np.array(rod_imping_heat.values())
 
-def calc_decay_heat(power_distribution, mass_record):
+def calc_decay_heat(power_distribution, mass_record, pool_volumn):
     sum = 0
     for iass, mass in mass_record.items():
         sum += mass[0] * power_distribution[iass - 1]
-    return sum
+    return sum / pool_volumn
 
 def calc_pool_heat(drop_list, T_up, surface_idx, pool_volumn, pool_area, decay_heat):
     iter_mass = iter.imap(lambda item: (item.mass_oxide(), item.mass_metal()), drop_list.values())

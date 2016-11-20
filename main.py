@@ -26,9 +26,9 @@ def summary(now, T, status, mesh, A, b):
     tave = sum(iter.imap(lambda (a, b): b, temp))/ len(temp)
     global last_mv, last_pv
     uti.print_with_style('[time %8f] ' % now ,mode = 'bold', fore = 'red' )
-    uti.print_with_style('max T %10e%s min %10e%s ave %10e ' % (tmax, mesh.get_3d_index(imax), tmin, mesh.get_3d_index(imin), tave))
+    uti.print_with_style('T max/min/mean %10e%13s\t%10e%13s\t%10e\n' % (tmax, mesh.get_3d_index(imax), tmin, mesh.get_3d_index(imin), tave))
     uti.print_with_style('[melt]',  mode = 'bold', fore = 'red' )
-    uti.print_with_style('melt_v %10e(+%10e) pool_v %10e(+%10e)\n' % (status['melted_volumn'], status['melted_volumn'] - last_mv, status['pool_volumn'], status['pool_volumn']-last_pv))
+    uti.print_with_style('melt_v/pool_v %10e(+%10e)\t%10e(+%10e)\n' % (status['melted_volumn'], status['melted_volumn'] - last_mv, status['pool_volumn'], status['pool_volumn']-last_pv))
     last_mv = status['melted_volumn']
     last_pv = status['pool_volumn']
     if status['board'] == 0:
@@ -138,7 +138,7 @@ def main():
         upper_surface_idx = mesh.get_upper_surface(status['melted_set_sum'])    
         status['melted_volumn'] += mesh.calc_melted_volumn(status['melted_set'])
         T_up_mean = np.array([ T[idx] for idx in upper_surface_idx] ).mean()
-        uti.log('down temp %e up temp %e' % (T_down_mean, T_up_mean))
+        uti.log('down/up-temp %10e\t%10e' % (T_down_mean, T_up_mean))
 
         #from impingment
         drop_point_idx = mesh.get_drop_point_idx(assembly_id)
@@ -159,11 +159,11 @@ def main():
         assert len(upper_surface_idx & status['melted_set_sum']) == 0
         solver.set_upper_flux(b_, list(upper_surface_idx), flux_from_core)
         #from pool
-        decay_heat = uti.calc_decay_heat(now_power_distribution, status['melted_mass'])
+        decay_heat = uti.calc_decay_heat(now_power_distribution, status['melted_mass'], status['pool_volumn'])
         uti.log('decay-pooling')
         flux_from_pool = uti.calc_pool_heat(drop_list, T_up_mean, pool_bottom_surface_idx, status['pool_volumn'], pool_area, decay_heat)
         #pool_area = math.pi * Const.dict['board_radious'] ** 2 / 4
-        uti.log('pool-flux %10e decay-heat %10e' % (flux_from_pool, decay_heat))
+        uti.log('pool-flux %10e decay-heat-per-volumn %10e' % (flux_from_pool, decay_heat))
         if flux_from_pool > 1. :
             assert len(pool_bottom_surface_idx & status['melted_set_sum']) == 0
             #debug
