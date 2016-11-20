@@ -144,7 +144,7 @@ def main():
         drop_point_idx = mesh.get_drop_point_idx(assembly_id)
         drop_point_temp = solver.get_drop_point_temp(drop_point_idx)
         rod_idx, drop_heat_for_rod = uti.calc_drop_heat(drop_list, drop_point_idx, drop_point_temp)
-        if len(drop_heat_for_rod) == 0:
+        if len(drop_heat_for_rod) != 0:
             uti.log('impinging')
             #print rod_idx
             assert len(set(rod_idx) & status['melted_set_sum']) == 0

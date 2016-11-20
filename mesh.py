@@ -227,53 +227,7 @@ class CylinderlMesh(StructuredMesh3D):
 
     def down_step(self, idx):
         return idx - 1 if self.get_3d_index(idx)[2] > 0 else None
-    def get_upper_surface(self, melted_set):
-        def _find_upper(idx):
-            while idx in melted_set:
-                idx = self.down_step(idx)#step
-            return idx
-        self._upper_boundary = set([_find_upper(idx) for idx in self._upper_boundary ])
-        if None in self._upper_boundary: self._upper_boundary.remove(None)
-        return self._upper_boundary
-
-    def get_pool_bottom(self, status):
-        melted_set = status['melted_set'] 
-        melted_set_tree = status['melted_set_tree']
-        pool_volumn = status['pool_volumn'] - uti.calc_hole_volumn()
-        # insert
-        iter_cord = iter.imap(lambda idx : (self.get_3d_index(idx), idx), melted_set)
-        #make h first
-        cord_idx_pair = [ ((z, y, x), idx) for ((x, y ,z), idx) in iter_cord]
-        for (cord, idx) in cord_idx_pair:
-            melted_set_tree[cord] = idx
-
-        ret = None
-        if len(melted_set_tree) == 0 :
-            print 'pool covering not melted yet'
-            ret = deepcopy(self._upper_boundary) 
-            r = Const.dict['board_radious']
-            area = math.pi * r ** 2 / 4
-            return ret, area
-        else:
-            vol = 0
-            pool_idxs  = set()
-            for cord, idx in melted_set_tree.items():
-                vol += self.get_volumn(idx)
-                if vol > pool_volumn:
-                    break
-                else:
-                    pool_idxs.add(idx)
-            lowest =  melted_set_tree.keys().next()
-            penetrate_iz = lowest[0] - 1
-            print 'penetrate-deep %e idx %d lowest-pool %s' % (self._cordinatez[penetrate_iz], penetrate_iz, str(lowest))
-            if vol > pool_volumn:
-                print 'pool covering'
-                ret = deepcopy(self._upper_boundary)
-            else:
-                print 'pool not cover yet'
-                ret = set([ self.down_step(idx) for idx in pool_idxs]) & self._upper_boundary
-
-        melted_set_sum = status['melted_set_sum']
+    def add_vertical_surface_and_area(self, ret, melted_set_sum, pool_idxs):
         pool_area = sum([self.get_neighbour_area(idx)[4] for idx in ret])
         iter_idx = iter.imap(lambda idx : self.get_neighbour(idx), pool_idxs)
         iter_area = iter.imap(lambda idx : self.get_neighbour_area(idx), pool_idxs)
@@ -307,8 +261,59 @@ class CylinderlMesh(StructuredMesh3D):
             if i4 is not None and i4 not in melted_set_sum:
                 ret.add(i4)
         #pool_area /= 4
-
         return ret, pool_area
+
+    def get_upper_surface(self, melted_set_sum):
+        def _find_upper(idx):
+            while idx in melted_set_sum:
+                idx = self.down_step(idx)#step
+            return idx
+        self._upper_boundary = set([_find_upper(idx) for idx in self._upper_boundary ])
+        if None in self._upper_boundary: self._upper_boundary.remove(None)
+        ret = deepcopy(self._upper_boundary)
+        self.add_vertical_surface_and_area(ret, melted_set_sum, melted_set_sum)
+        return ret
+
+    def get_pool_bottom(self, status):
+        melted_set = status['melted_set'] 
+        melted_set_tree = status['melted_set_tree']
+        pool_volumn = status['pool_volumn'] - uti.calc_hole_volumn()
+        # insert
+        iter_cord = iter.imap(lambda idx : (self.get_3d_index(idx), idx), melted_set)
+        #make h first
+        cord_idx_pair = [ ((z, y, x), idx) for ((x, y ,z), idx) in iter_cord]
+        for (cord, idx) in cord_idx_pair:
+            melted_set_tree[cord] = idx
+
+        ret = None
+        if len(melted_set_tree) == 0 :
+            print 'pool covering not melted yet'
+            ret = deepcopy(self._upper_boundary) 
+            r = Const.dict['board_radious']
+            area = math.pi * r ** 2 / 4
+            return ret, area
+        else:
+            vol = 0
+            pool_idxs  = set()
+            for cord, idx in melted_set_tree.items():
+                vol += self.get_volumn(idx)
+                if vol > pool_volumn:
+                    break
+                else:
+                    pool_idxs.add(idx)
+            lowest =  melted_set_tree.keys().next()
+            penetrate_iz = lowest[0] - 1
+            print 'penetrate-deep %e idx %d lowest-pool %s' % (self._cordinatez[penetrate_iz], penetrate_iz, str(lowest))
+            if vol > pool_volumn:
+                print 'pool covering'
+                r = Const.dict['board_radious']
+                area = math.pi * r ** 2 / 4
+                return deepcopy(self._upper_boundary), area
+            else:
+                print 'pool not cover yet'
+                ret = set([ self.down_step(idx) for idx in pool_idxs]) & self._upper_boundary
+                return self.add_vertical_surface_and_area(ret, status['melted_set_sum'], pool_idxs)
+
 
     def calc_melted_volumn(self, melted_set):
         return sum(map(lambda idx: self.get_volumn(idx), melted_set))
