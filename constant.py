@@ -12,14 +12,15 @@ dict = {
     'bottom_sigma':5.67e-8, #W/(m^2 * K^4)
     'bottom_epsi': 0.8, 
     'rod_radious': 0.0095 / 2, #m
+    'rod_in_radious': 0.00836 / 2, #m
     'reference_ST_number': 0.0033,
     'core_height': 3.657, #m
     'nr': 270, #
     'nt': 72, #
-    'nz': 100, #
+    'nz': 30, #
     'radious_increase_ratio': 0.995,
     'T_initmin': 510,
-    'T_initmax': 1490,
+    'T_initmax': 1590,
     'T_steam': 500,
     'Pr_steam': 1.003, 
     'lambda_steam': 0.025, # W/(m * K)
@@ -48,8 +49,9 @@ dict = {
     'liquid_oxide_Pr': 1.176, # niu / a
     'liquid_oxide_lambda':2.5, # W / (m * K)
     # output control
-    'output_step': 50, 
+    'output_step': 10, 
     'restart_step': 100,
+    'restart':True,
  }
 
 

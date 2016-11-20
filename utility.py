@@ -96,14 +96,22 @@ def core_status_generator(t_start, t_step, restart_time):
     radial_factor = np.array(Const.power_distribute)
     radial_factor /= sum(radial_factor)
     basic_power_sum = Const.dict['total_power']
+    vol = math.pi * Const.dict['rod_radious'] ** 2 * Const.dict['core_height']
+    m = vol * Const.dict['fuel_dense']
+    m *= 17 * 17
     while True:
         now_water = np.interp(t, water_history[:, 0], water_history[:, 1])
         now_power = np.interp(t, power_history[:, 0], power_history[:, 1])
         bottom_temp = np.interp(t, bottom_history[:, 0], bottom_history[:, 1])
-        now_power_distribution = basic_power_sum * now_power * np.array(radial_factor)
+        now_power_distribution = (basic_power_sum * now_power / m)  * np.array(radial_factor) 
         if t >= restart_time:
             yield  now_water, bottom_temp,  now_power_distribution
         t += t_step
+
+def record_mass(mass_record, drop_list):
+    for iass, item in drop_list.items():
+        mass_record.get(iass)[0] += drop_list[iass].mass_sum()
+        mass_record.get(iass)[1] += drop_list[iass].mass_metal()
 
 @jit(float64(float64, float64, float64, float64, float64), nopython=True)
 def calcGr(dT, L, beta, niu, rou):
@@ -132,13 +140,25 @@ def calcMoltenMetalFlux(Ra, Pr, lamda, L):
     Nu = 0.069 * Ra ** (1/3) * Pr ** (0.074)
     return Nu * lamda / L
 
-@jit(float64(float64, float64, float64), nopython=True)
-def calcMoltenOxideFlux(Ra_p, lamda, L):
-    if not 1e12 < Ra_p < 2e16:
-        print 'Ra_p didnt confont correlation', Ra_p
-        return 0.0
-    Nu = 0.1857 * Ra_p ** 0.2304
-    return Nu * lamda / L
+@jit(float64(float64, float64, float64, float64), nopython=True)
+def calcMoltenOxideFlux(Ra_p, Q, V, A):
+    if not  Ra_p < 2e16:
+        print 'Ra_p didnt confont correlation',  Ra_p
+        Ra_p = 2e16
+    if not  Ra_p > 1e12:
+        Ra_p = 1e12
+        print 'Ra_p didnt confont correlation',  Ra_p
+        return 0
+    #Nu = 0.1857 * Ra_p ** 0.2304
+    #return Nu * lamda / L
+    ratio = 0.63 * Ra_p ** 0.0333
+    ret = Q * V / (A *(1 + ratio))
+    if ret > 1.e9:
+        ret = 0.
+    #print Q, V, A, ratio
+    #print ret
+    return ret
+
  
 @jit(float64(float64, float64, float64, float64), nopython=True)
 def calcSteamHeatTransferRateCore(Gr, Prf, L, lamda):
@@ -196,7 +216,9 @@ def calc_core_flux(bottom_t, board_t, h):
 def calc_drop_heat(drop_list, assembly_id, drop_point_temp):
     #assert isinstance(drop_list, dict)
     #assert isinstance(assembly_id, dict)
-    drop_heat_for_each_assembly = [(iass, item.drop_heat(temp)) for ((iass, item), (iass2, temp)) in zip( drop_list.items(), drop_point_temp.items())] 
+    drop_heat_for_each_assembly = {}
+    for iass, temp in drop_point_temp:
+        drop_heat_for_each_assembly[iass] = drop_list[iass].drop_heat(temp)
     sum_heat = 0
     for (iass, heat) in drop_heat_for_each_assembly:
         sum_heat += heat
@@ -213,28 +235,34 @@ def calc_drop_heat(drop_list, assembly_id, drop_point_temp):
         if abs(v) < 1.e-8:
             del rod_imping_heat[k]
     if abs(sum_heat) < 1.e-5:
-        return None, None
+        return list(), list()
     else:
-        log( 'drop heat %e mass %e per_posi %e' % (sum_heat, sum_mass, sum_heat / len(rod_imping_heat)) )
+        log('drop heat %e mass %e per_posi %e' % (sum_heat, sum_mass, sum_heat / len(rod_imping_heat)) )
         #print rod_imping_heat.values()
         return rod_imping_heat.keys(), np.array(rod_imping_heat.values())
 
-def calc_pool_heat(drop_list, T_up, surface_idx, pool_volumn, pool_area, power_distribution):
+def calc_decay_heat(power_distribution, mass_record):
+    sum = 0
+    for iass, mass in mass_record.items():
+        sum += mass[0] * power_distribution[iass - 1]
+    return sum
+
+def calc_pool_heat(drop_list, T_up, surface_idx, pool_volumn, pool_area, decay_heat):
     iter_mass = iter.imap(lambda item: (item.mass_oxide(), item.mass_metal()), drop_list.values())
     mass_oxide, mass_metal = reduce(lambda (a, b), (c, d): (a+c, b+d), iter_mass)
     mass_sum = mass_oxide + mass_metal
     T_corium = sum(iter.imap(lambda item: item.mp(), drop_list.values()))
 
-    Q = power_distribution.sum()
+    Q = decay_heat
     Q /= pool_volumn
     H = pool_volumn / pool_area
     H /= 2
     Ra_p = calcRa_p(70, H, #T_up - T_corium, H, 
                     Const.dict['liquid_oxide_beta'], Const.dict['liquid_oxide_niu'], Const.dict['liquid_oxide_rou'], 
                     Const.dict['liquid_oxide_Pr'], Q, Const.dict['liquid_oxide_lambda'])
-    h = calcMoltenOxideFlux(Ra_p, Const.dict['liquid_oxide_lambda'], H)
-    print 'pool Height %f heat %f area %f' % (H, h, pool_area)
-    return h * 70#(T_up - T_corium)
+    print 'pool Height %f area %f' % (H, pool_area)
+    return 0. - calcMoltenOxideFlux(Ra_p, Q, pool_volumn, pool_area)
+    #return h * 70#(T_up - T_corium)
 
 def calc_hole_volumn():
     r = Const.dict['rod_radious']
@@ -279,6 +307,7 @@ def load(temp_array):
                 tree[k] = v
             status['melted_set_tree'] = tree
             temp_array[:]  = np.load(_f)[:] 
+            status['time_step'] += 1
             print status
             return status
         except IOError:

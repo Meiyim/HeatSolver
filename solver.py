@@ -2,6 +2,7 @@ import numpy as np
 import mesh as Mesh
 import utility as uti
 import constant as Const
+import itertools as iter
 from numba import jit
 from petsc4py import PETSc
 
@@ -59,8 +60,9 @@ class PetscSolver(Solver):
         self._ksp.setPC(pc)
         #self.build_laplas_matrix(self._coefMatrixTemplate)
 
-    def add_teporal_term(self, A, b, dt):
+    def add_teporal_term(self, A, b, melted_set, dt):
         for i in xrange(0, self._mesh.get_ncell()):
+            if i in melted_set: continue
             vol = self._mesh.get_volumn(i)
             rcp  = self._mesh.get_material_at_index(i).rcp()
             temporal_term = vol *  rcp / dt
@@ -88,12 +90,54 @@ class PetscSolver(Solver):
         b.assemblyBegin()
         b.assemblyEnd()
     def set_upper_flux(self, b, idx_array, flux):
+        if len(idx_array) == 0: return
         areas = [self._mesh.get_neighbour_area(idx)[4] for idx in idx_array]
         flux = flux * np.array(areas)
         b.setValues(list(idx_array), 0. - flux, addv = True)
         b.assemblyBegin()
         b.assemblyEnd()
-    def build_laplas_matrix(self, A):
+    def update_laspack_matrix(self, melted_set, melted_set_sum):
+        A = self._coefMatrixTemplate
+        nei_set = set()
+        for idx in melted_set:
+            self._T[idx] = 1.0
+            nei = filter(lambda v : v is not None,  self._mesh.get_neighbour(idx) )
+            for nidx in nei:
+                nei_set.add(nidx)
+            A.setValues([idx], nei, [0.0] * len(nei), addv = False)
+            A.setValues(nei, [idx], [0.0] * len(nei), addv = False)
+            A.setValue(idx, idx, 100.0, addv = False)
+        nei_set = nei_set - melted_set_sum
+        for row in nei_set: #recalculate
+            assert row not in melted_set
+            nei = self._mesh.get_neighbour(row) 
+            lens = self._mesh.get_neighbour_lenth(row)
+            coef = self._mesh.get_neighbour_coef(row)
+            area = self._mesh.get_neighbour_area(row)
+    
+            #print 'cord', self._mesh.get_3d_index(row)
+            #print 'coef', coef
+            #print 'area', area
+            #print 'lens', lens
+            #print 'nei', nei
+            lens = np.array([ l for i,l in enumerate(lens) if nei[i] is not None]) #and nei[i] not in melted_set_sum])
+            area = np.array([ a for i,a in enumerate(area) if nei[i] is not None]) #and nei[i] not in melted_set_sum])
+            nei = filter(lambda val: val is not None, nei)
+
+            area = np.array([ 0. if nei[i] in melted_set_sum else a  for i,a in enumerate(area)]) #and nei[i] not in melted_set_sum])
+
+            vals = -1.0 * coef * area / lens
+            #print 'vals',  vals
+            A.setValues([row], nei, vals, addv = False) # off-diagnal
+            center = 0. - sum(vals)
+            A.setValue(row, row,  center, addv = False)#diagnal
+        A.assemblyBegin()
+        A.assemblyEnd()
+
+
+
+    def build_laplas_matrix(self):
+        A = self._coefMatrixTemplate
         uti.log('building laplas template...')
         for row in xrange(0, self._mesh.get_ncell()):
             nei = self._mesh.get_neighbour(row) 
@@ -120,16 +164,24 @@ class PetscSolver(Solver):
         A = self._coefMatrixTemplate
         b = self._rhsTemplate
         self._melted_set = self._melted_set | melted_mask #merge
+        minus_dict = {}
         for idx in melted_mask:
             self._T[idx] = -1.0
-            nei = filter(lambda v : v is not None,  self._mesh.get_neighbour(idx) )
+            nei = filter(lambda v : v is not None and v not in melted_mask,  self._mesh.get_neighbour(idx) )
+            for nid, val in zip( nei, A.getValues(idx, nei) ):
+                if minus_dict.get(nid) is None:
+                    minus_dict[nid] = val
+                else:
+                    minus_dict[nid] += val
             A.setValues([idx], nei, [0.0] * len(nei), addv = False)
             A.setValues(nei, [idx], [0.0] * len(nei), addv = False)
-        b.setValues(list(melted_mask), [0.0] * len(melted_mask), addv = False)
+            A.setValue(idx, idx, 100.0, addv = False)
         A.assemblyBegin()
-        b.assemblyBegin()
         A.assemblyEnd()
-        b.assemblyEnd()
+        for idx, val in minus_dict.items():
+            A.setValue(idx, idx, 0. - val, addv = True)
+        A.assemblyBegin()
+        A.assemblyEnd()
     def get_mask(self):
         return self._melted_set
     def update_mask(self):
