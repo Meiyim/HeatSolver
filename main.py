@@ -171,9 +171,7 @@ def main():
             peek_id = pool_bottom_surface_idx.pop()
             pool_bottom_surface_idx.add(peek_id)
             barr = b_.getArray()
-            print 'barr before %e' % barr[peek_id]
             solver.set_upper_flux(b_, pool_bottom_surface_idx, flux_from_pool)  
-            print 'barr before %e' % barr[peek_id]
         # other boundary goes here
         # solve
         # debug

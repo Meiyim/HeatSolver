@@ -230,9 +230,9 @@ class CylinderlMesh(StructuredMesh3D):
     def add_vertical_surface_and_area(self, ret, melted_set_sum, pool_idxs):
         pool_area = sum([self.get_neighbour_area(idx)[4] for idx in ret])
         iter_idx = iter.imap(lambda idx : self.get_neighbour(idx), pool_idxs)
+        '''
         iter_area = iter.imap(lambda idx : self.get_neighbour_area(idx), pool_idxs)
         iter2 = iter.imap(lambda (idxs, area): ((idxs[0], area[0]), (idxs[1], area[1]), (idxs[2], area[2]), (idxs[3], area[3])), zip(iter_idx, iter_area))
-        '''
         for (i1, a1), (i2, a2), (i3, a3), (i4, a4) in iter2:
             if i1 in ret or i2 in ret or i3 in ret or i4 in ret:
                 continue
@@ -249,7 +249,7 @@ class CylinderlMesh(StructuredMesh3D):
                 ret.add(i4)
                 pool_area += a4
         '''
-        for i1, i2, i3, i4 in iter_idx:
+        for i1, i2, i3, i4, i5, i6 in iter_idx:
             if i1 in ret or i2 in ret or i3 in ret or i4 in ret:
                 continue
             if i1 is not None and i1 not in melted_set_sum:
@@ -305,12 +305,12 @@ class CylinderlMesh(StructuredMesh3D):
             penetrate_iz = lowest[0] - 1
             print 'penetrate-deep %e idx %d lowest-pool %s' % (self._cordinatez[penetrate_iz], penetrate_iz, str(lowest))
             if vol > pool_volumn:
-                print 'pool covering'
+                uti.log('pool covering')
                 r = Const.dict['board_radious']
                 area = math.pi * r ** 2 / 4
                 return deepcopy(self._upper_boundary), area
             else:
-                print 'pool not cover yet'
+                uti.log('pool not cover yet')
                 ret = set([ self.down_step(idx) for idx in pool_idxs]) & self._upper_boundary
                 return self.add_vertical_surface_and_area(ret, status['melted_set_sum'], pool_idxs)
 
