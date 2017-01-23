@@ -113,6 +113,8 @@ def main():
         if len(status['melted_set_sum']) != 0:
             #solver.set_mask(status['melted_set_sum'])
             solver.update_laspack_matrix(status['melted_set_sum'], status['melted_set_sum'])
+    else:
+        uti.log(str(Const.dict))
     for t, drop_list in uti.parse_input_file('melt_history_3.short', status['time_step']):
         now_water, bottom_t, now_power_distribution = core_status.next()
         status['time_step']  = t
@@ -186,7 +188,7 @@ def main():
                 raw_input()
         raw_input()
         '''
-        T = solver.solve(1.e-6, 100)
+        T = solver.solve(1.e-6, 500)
         status['melted_set'] = solver.update_mask()
         status['melted_set_sum'] = status['melted_set_sum'] | status['melted_set']
         summary(t, T, status, mesh, A_, b_)

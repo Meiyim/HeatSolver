@@ -303,7 +303,7 @@ class CylinderlMesh(StructuredMesh3D):
                     pool_idxs.add(idx)
             lowest =  melted_set_tree.keys().next()
             penetrate_iz = lowest[0] - 1
-            print 'penetrate-deep %e idx %d lowest-pool %s' % (self._cordinatez[penetrate_iz], penetrate_iz, str(lowest))
+            uti.log('penetrate-deep %e idx %d lowest-pool %s' % (self._cordinatez[penetrate_iz], penetrate_iz, str(lowest)))
             if vol > pool_volumn:
                 uti.log('pool covering')
                 r = Const.dict['board_radious']

@@ -1,4 +1,3 @@
-
 dict = {
     'total_power': 3.15e9, # W
     'global_rou': 7020.0, # kg/m-3
@@ -7,7 +6,7 @@ dict = {
     'global_lamda':25.0, # W /(m * K)
     'global_melt_point':1600.0, #K 
     'board_radious': 3.63 / 2, #m
-    'board_thick': 0.415, #m #500?
+    'board_thick': 0.3, #m #500?
     'bottom_board_distance':0.079, #m
     'bottom_sigma':5.67e-8, #W/(m^2 * K^4)
     'bottom_epsi': 0.8, 
@@ -15,9 +14,9 @@ dict = {
     'rod_in_radious': 0.00836 / 2, #m
     'reference_ST_number': 0.0033,
     'core_height': 3.657, #m
-    'nr': 270, #
-    'nt': 72, #
-    'nz': 30, #
+    'nr': 200, #
+    'nt': 144, #
+    'nz': 50, #
     'radious_increase_ratio': 0.995,
     'T_initmin': 510,
     'T_initmax': 1590,
@@ -45,23 +44,24 @@ dict = {
     'liquid_oxide_rou:': 8866, # kg / (m^3)
     'liquid_oxide_niu':0.494e-6, # m^2/s
     'liquid_oxide_rou':8866, #kg/m3
+    'liquid_oxide_cp': 514.49,
     # a = 4.2e-7
     'liquid_oxide_Pr': 1.176, # niu / a
     'liquid_oxide_lambda':2.5, # W / (m * K)
     # output control
-    'output_step': 10, 
+    'output_step': 100, 
     'restart_step': 100,
     'restart':True,
  }
 
 
 bottom_history = [
-    (0.0, 1600),
-    (1000.0, 1600),
-    (2000.0, 1600),
-    (3000.0, 1600),
-    (4000.0, 1600), 
-    (5000.0, 1600), 
+    (0.0, 1500),
+    (1000.0, 1500),
+    (2000.0, 1500),
+    (3000.0, 1500),
+    (4000.0, 1500), 
+    (5000.0, 1500), 
 ]
 
 power_distribute = [

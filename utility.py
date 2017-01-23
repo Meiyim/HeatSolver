@@ -48,8 +48,8 @@ class Drop_mass(object):
         self.gray_mass = g
     def drop_heat(self, imping_temp):
         return _calc_drop_heat(self.fuel_mass, self.clad_mass, self.gray_mass,
-                              Const.dict['fuel_dense'], Const.dict['clad_dense'], Const.dict['gray_dense'],
-                              Const.dict['fuel_cp'], Const.dict['clad_cp'], Const.dict['gray_cp'],
+                              Const.dict['liquid_oxide_rou'], Const.dict['clad_dense'], Const.dict['gray_dense'],
+                              Const.dict['liquid_oxide_cp'], Const.dict['clad_cp'], Const.dict['gray_cp'],
                               Const.dict['fuel_mp'], Const.dict['clad_mp'], Const.dict['gray_mp'],
                               Const.dict['gravity'], Const.dict['core_height'], Const.dict['rod_radious'], 
                               Const.dict['reference_ST_number'], imping_temp)
